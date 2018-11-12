@@ -65,7 +65,7 @@ brca <- brca[,-1]
 rm(header.brca)
 ```
 
-```{r gathering the TF}
+```{r}
 brca.TF.list<-brca[unique(grep(paste(c(TF.list),collapse = "|"), rownames(brca))),]
 ```
 
@@ -79,7 +79,7 @@ xy.brca <- xy.brca[!xd.brca,]
 nrow(xy.brca)
 ```
 
-```{r normalize}
+```{r}
 xy.brca.norm<-calcNormFactors(xy.brca)
 xy.brca.norm$samples
 ```
@@ -166,7 +166,7 @@ xy.coad <- xy.coad[!xd.coad,]
 nrow(xy.coad)
 ```
 
-```{r normalize}
+```{r}
 xy.coad.norm<-calcNormFactors(xy.coad)
 xy.coad.norm$samples
 ```
@@ -243,7 +243,7 @@ luad <- luad[,-1]
 rm(header.luad)
 ```
 
-```{r gathering the TF}
+```{r}
 luad.TF.list<-luad[unique(grep(paste(c(TF.list),collapse = "|"), rownames(luad))),]
 ```
 
@@ -258,7 +258,7 @@ xy.luad <- xy.luad[!xd.luad,]
 nrow(xy.luad)
 ```
 
-```{r normalize}
+```{r}
 xy.luad.norm<-calcNormFactors(xy.luad)
 xy.luad.norm$samples
 ```
@@ -340,7 +340,7 @@ prad <- prad[,-1]
 rm(header.prad)
 ```
 
-```{r gathering the TF}
+```{r}
 prad.TF.list<-prad[unique(grep(paste(c(TF.list),collapse = "|"), rownames(prad))),]
 ```
 
@@ -354,7 +354,7 @@ xy.prad <- xy.prad[!xd.prad,]
 nrow(xy.prad)
 ```
 
-```{r normalize}
+```{r}
 xy.prad.norm<-calcNormFactors(xy.prad)
 xy.prad.norm$samples
 ```

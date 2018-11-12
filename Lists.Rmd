@@ -1,0 +1,102 @@
+---
+title: "TF lists"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## FIMO
+Preparation of FIMO list:
+
+```{bash, eval = FALSE}
+mkdir utils
+
+cd $_
+# retrieving transfac+fimo
+wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.transfac-0.1.bb
+
+# getting the exec for linux 64 bits
+
+rsync -aP rsync://hgdownload.soe.ucsc.edu/genome/admin/exe/linux.x86_64/bigBedToBed .
+
+# making it runnable
+
+chmod a+x bigBedToBed
+
+# converting to bed
+
+./bigBedToBed fimo.hg19.transfac-0.1.bb test.bed
+
+# checking how a bedfile looks like
+
+head test.bed
+
+# counting the TFBS by TF (head)
+
+cut -f4 test.bed | sort | uniq -c | head
+
+cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
+mv fimo_transfac.txt ../data
+```
+
+##JASPAR
+Preparation of JASPAR lists:
+
+```{r jaspar}
+cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
+utils/bigBedToBed fimo.hg19.jaspar_core-0.1.bb jaspar_hg19.bed'
+system(cmd)
+file.rename('jaspar_hg19.bed', file.path('data', 'jaspar_hg19.bed'))
+file.remove('fimo.hg19.jaspar_core-0.1.bb')
+
+jaspar_ids <- unique(read.table(file.path('prueba git/data', 'jaspar_hg19.bed'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE)$V4)
+
+length(jaspar_ids)
+View(jaspar_ids)
+```
+Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HGNC symbols, in order to do that we use the package biomaRt from bioconductor (first installation will take some time):
+
+```{r martconfig}
+# To show which marts are available
+listMarts()
+
+# You need the SNP mart
+mart <- useMart("ensembl")
+
+# Find homo sapiens
+listDatasets(mart)
+
+# This will be the dataset we want to use
+dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
+
+# Show available filters
+listFilters(dataset)
+
+# Now list all available attributes
+listAttributes(dataset)
+
+# To get the ensembl gene id belonging to the SNPs
+hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol'), 
+      filters = 'external_gene_name', 
+      values = fimo_transfac$tf, 
+      mart = dataset)
+
+hgnc.factor.fimo.list<-as.list(hgnc.factor.fimo.list)
+(hgnc.factor.fimo.list)
+
+hgnc.factor.jaspar.list<-getBM(attributes=c('hgnc_symbol'), 
+      filters = 'external_gene_name', 
+      values = jaspar_ids, 
+      mart = dataset)
+
+hgnc.factor.jaspar.list<-as.list(hgnc.factor.jaspar.list)
+(hgnc.factor.jaspar.list)
+```
+
+```{r TF lists}
+TF.list<-sort(unique(c(hgnc.factor.fimo.list$hgnc_symbol, hgnc.factor.jaspar.list$hgnc_symbol)))
+```
