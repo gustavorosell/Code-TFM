@@ -1,0 +1,357 @@
+---
+title: "TFM-1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(FirebrowseR)
+```
+Prueba git:
+```{r}
+
+```
+
+
+##PRAD:
+Donwloading the dataset:
+```{bash eval=FALSE, include=FALSE}
+wget http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/PRAD/20160128/gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz
+```
+
+```{bash}
+ls -larth
+tar xzvf gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz 
+head gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/PRAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt | cut -f1
+```
+Incorporing the dataset to R:
+```{r}
+PRAD.data<-read.delim("~/Documentos/TFM/gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/PRAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt")
+head(PRAD.data)
+PRAD.data$Hybridization.REF
+```
+
+
+##BREAST:
+Donwloading the dataset:
+```{bash eval=FALSE, include=FALSE}
+wget gdac.broadinstitute.org/runs/stddata__2016_01_28/data/BRCA/20160128/gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz
+```
+
+```{bash}
+ls -larth
+tar xzvf gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz 
+head gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/BRCA.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt| cut -f1
+```
+```{bash}
+head gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/BRCA.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt | cut -f1
+```
+Incorporing the dataset to R:
+```{r}
+ BRCA.data<-read.delim("~/Documentos/TFM/gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/BRCA.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt")
+head(BRCA.data)
+```
+
+##COAD:
+Donwloading the dataset:
+```{bash eval=FALSE, include=FALSE}
+wget gdac.broadinstitute.org/runs/stddata__2016_01_28/data/COAD/20160128/gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz
+```
+
+```{bash}
+ls -larth
+tar xzvf gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz 
+head gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/COAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt| cut -f1
+```
+
+```{bash}
+head gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/COAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt | cut -f1
+```
+Incorporing the dataset to R:
+```{r}
+ COAD.data<-read.delim("~/Documentos/TFM/gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/COAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt")
+head(COAD.data)
+```
+
+##LUAD:
+Donwloading the dataset:
+```{bash eval=FALSE, include=FALSE}
+wget gdac.broadinstitute.org/runs/stddata__2016_01_28/data/LUAD/20160128/gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz
+```
+
+```{bash}
+ls -larth
+tar xzvf gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz 
+head gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/LUAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt| cut -f1
+```
+
+```{bash}
+head gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/LUAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt | cut -f1
+```
+Incorporing the dataset to R:
+```{r}
+ LUAD.data<-read.delim("~/Documentos/TFM/gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/LUAD.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt")
+head(LUAD.data)
+```
+
+###First look:
+
+A quick look into the the dimension of the dataset, in the rows we have the genes (that`s why all the dataset have the same rows) and in the columns we have our amount of pacients:
+```{r}
+dim(BRCA.data)
+dim(COAD.data)
+dim(LUAD.data)
+dim(PRAD.data)
+```
+
+Those all genes we select only a few (transcript factors only)
+
+Preparation of TF lists:
+```{r}
+uscs.list<-read.delim("~/Documentos/TFM/uscs_list", header = FALSE)
+uscs.list<-uscs.list[-1,3:4]
+colnames(uscs.list)<- c("Cell Line", "Factor")
+head(uscs.list)
+uscs.list[!apply(uscs.list == "", 1, all),]
+uscs.list.factors<-as.data.frame(unique(uscs.list[,2]))
+uscs.list.factors<-as.data.frame(uscs.list.factors[-1, ])
+```
+
+```{r}
+uniprot.list <- read.delim("~/Documentos/TFM/uniprot_list.tab")
+uniprot.list.factors<-as.data.frame(unique(uniprot.list[,2]))
+```
+
+FIMO list:
+```{bash}
+mkdir tests_bb
+
+cd $_
+# retrieving transfac+fimo
+wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.transfac-0.1.bb
+
+# getting the exec for linux 64 bits
+
+rsync -aP rsync://hgdownload.soe.ucsc.edu/genome/admin/exe/linux.x86_64/bigBedToBed .
+
+# making it runnable
+
+chmod a+x bigBedToBed
+
+# converting to bed
+
+./bigBedToBed fimo.hg19.transfac-0.1.bb test.bed
+
+# checking how a bedfile looks like
+
+head test.bed
+
+# counting the TFBS by TF (head)
+
+cut -f4 test.bed | sort | uniq -c | head
+
+cut -f4 test.bed | sort | uniq -c > test_bed_list.txt
+
+
+```
+
+```{r}
+test.bed.list.factors<-read.table("~/Documentos/TFM/tests_bb/test_bed_list.txt", quote="\"", comment.char="")
+colnames(test.bed.list.factors)<- c("Number", "Factor")
+head(test.bed.list.factors)
+```
+Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HGNC symbols, in order to do that we use the package biomaRt from bioconductor (first installation will take some time):
+```{r eval=FALSE, include=FALSE}
+#source("https://bioconductor.org/biocLite.R")
+biocLite("biomaRt")
+```
+
+```{r}
+library("biomaRt")
+
+# To show which marts are available
+listMarts()
+
+# You need the SNP mart
+mart <- useMart("ensembl")
+
+# Find homo sapiens
+listDatasets(mart)
+
+# This will be the dataset we want to use
+dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
+
+# Show available filters
+listFilters(dataset)
+
+# Now list all available attributes
+listAttributes(dataset)
+
+# To get the ensembl gene id belonging to the SNPs
+hgnc.factor.list<-getBM(attributes=c('hgnc_symbol'), 
+      filters = 'external_gene_name', 
+      values = test.bed.list.factors$Factor, 
+      mart = dataset)
+
+hgnc.factor.list<-as.list(hgnc.factor.list)
+(hgnc.factor.list)
+```
+For the next step we take the names of the hgnc.tf list and put them exactly like this, in order to chose the exact TFs.
+25 TF in our list, 25 in the list we have.
+Gathering the TF from our samples (TCGA)
+```{r}
+#For BRCA:
+brca.TF.list<-BRCA.data[unique(grep(paste(c("\\bTBX22\\b", "\\bSRF\\b", "\\bCTCF\\b", "\\bSTAT1\\b", "\\bAR\\b", "\\bSP4\\b", "\\bYY1\\b", "\\bSMAD4\\b", "\\bMZF1\\b", "\\bVDR\\b", "\\bLMO2\\b", "\\bGC\\b", "\\bHIC1\\b", "\\bPBX1\\b", "\\bSP3\\b", "\\bRFX1\\b", "\\bFOXP1\\b", "\\bFOXJ2\\b", "\\bPITX2\\b", "\\bREST\\b", "\\bNRG1\\b", "\\bZNF219\\b", "\\bHSF1\\b", "\\bSP1\\b", "\\bTBX15\\b"),collapse = "|"), BRCA.data$Hybridization.REF)),]
+```
+
+```{r}
+#For COAD:
+coad.TF.list<-COAD.data[unique(grep(paste(c("\\bTBX22\\b", "\\bSRF\\b", "\\bCTCF\\b", "\\bSTAT1\\b", "\\bAR\\b", "\\bSP4\\b", "\\bYY1\\b", "\\bSMAD4\\b", "\\bMZF1\\b", "\\bVDR\\b", "\\bLMO2\\b", "\\bGC\\b", "\\bHIC1\\b", "\\bPBX1\\b", "\\bSP3\\b", "\\bRFX1\\b", "\\bFOXP1\\b", "\\bFOXJ2\\b", "\\bPITX2\\b", "\\bREST\\b", "\\bNRG1\\b", "\\bZNF219\\b", "\\bHSF1\\b", "\\bSP1\\b", "\\bTBX15\\b"),collapse = "|"), COAD.data$Hybridization.REF)),]
+```
+
+```{r}
+#For LUAD:
+luad.TF.list<-LUAD.data[unique(grep(paste(c("\\bTBX22\\b", "\\bSRF\\b", "\\bCTCF\\b", "\\bSTAT1\\b", "\\bAR\\b", "\\bSP4\\b", "\\bYY1\\b", "\\bSMAD4\\b", "\\bMZF1\\b", "\\bVDR\\b", "\\bLMO2\\b", "\\bGC\\b", "\\bHIC1\\b", "\\bPBX1\\b", "\\bSP3\\b", "\\bRFX1\\b", "\\bFOXP1\\b", "\\bFOXJ2\\b", "\\bPITX2\\b", "\\bREST\\b", "\\bNRG1\\b", "\\bZNF219\\b", "\\bHSF1\\b", "\\bSP1\\b", "\\bTBX15\\b"),collapse = "|"), LUAD.data$Hybridization.REF)),]
+```
+
+```{r}
+#For PRAD:
+prad.TF.list<-PRAD.data[unique(grep(paste(c("\\bTBX22\\b", "\\bSRF\\b", "\\bCTCF\\b", "\\bSTAT1\\b", "\\bAR\\b", "\\bSP4\\b", "\\bYY1\\b", "\\bSMAD4\\b", "\\bMZF1\\b", "\\bVDR\\b", "\\bLMO2\\b", "\\bGC\\b", "\\bHIC1\\b", "\\bPBX1\\b", "\\bSP3\\b", "\\bRFX1\\b", "\\bFOXP1\\b", "\\bFOXJ2\\b", "\\bPITX2\\b", "\\bREST\\b", "\\bNRG1\\b", "\\bZNF219\\b", "\\bHSF1\\b", "\\bSP1\\b", "\\bTBX15\\b"),collapse = "|"), PRAD.data$Hybridization.REF)),]
+head(prad.TF.list)
+```
+
+Now we have our TF, let's see if they have singnificant variations over patients:
+In order to do that, we will compare the normal tissue, tumor and control samples, which we can identify by the TCGA code.
+(Tumor types range from 01 - 09, normal types from 10 - 19 and control samples from 20 - 29. )
+
+First we get the amount of:
+
+For BRCA:
+```{r}
+samples.names.brca<-sapply(strsplit(names(brca.TF.list), split = '.', fixed = TRUE), function(x) return(x[4]))
+table(samples.names.brca)
+```
+tumor
+```{r}
+brca.TF.list.tumor<-brca.TF.list[unique(grep(paste(c("\\b.01B","\\b.01A","\\b.06A"),collapse = "|"), names(brca.TF.list)))]
+row.names(brca.TF.list.tumor)<-sort(brca.TF.list$Hybridization.REF)
+brca.TF.list.tumor.unlist<-as.numeric(as.character(unlist(brca.TF.list.tumor[1:25,])))
+```
+
+normal
+```{r}
+brca.TF.list.normal<-brca.TF.list[unique(grep(paste(c("\\b.11A","\\b.11B"),collapse = "|"), names(brca.TF.list)))]
+row.names(brca.TF.list.normal)<-sort(brca.TF.list$Hybridization.REF)
+brca.TF.list.normal.unlist<-as.numeric(as.character(unlist(brca.TF.list.normal[1:25,])))
+```
+Plots for BRCA:
+```{r}
+#Normal:
+par(mfrow=c(2,1))
+brca.plot.normal.1<-plot(density(brca.TF.list.normal.unlist))
+brca.plot.tumor.1<-plot(density(brca.TF.list.tumor.unlist))
+#With log:
+brca.plot.normal.2<-plot(density(log1p(brca.TF.list.normal.unlist)))
+brca.plot.tumor.2<-plot(density(log1p(brca.TF.list.tumor.unlist)))
+#Boxplot:
+brca.boxplot.normal.1<-boxplot(brca.TF.list.normal.unlist)
+brca.boxplot.tumor.1<-boxplot(brca.TF.list.tumor.unlist)
+```
+
+For COAD:
+```{r}
+samples.names.coad<-sapply(strsplit(names(coad.TF.list), split = '.', fixed = TRUE), function(x) return(x[4]))
+table(samples.names.coad)
+```
+tumor
+```{r}
+coad.TF.list.tumor<-coad.TF.list[unique(grep(paste(c("\\b.01A","\\b.01B","\\b.02A","\\b.06A"),collapse = "|"), names(coad.TF.list)))]
+row.names(coad.TF.list.tumor)<-sort(coad.TF.list$Hybridization.REF)
+coad.TF.list.tumor.unlist<-as.numeric(as.character(unlist(coad.TF.list.tumor[1:25,])))
+```
+normal
+```{r}
+coad.TF.list.normal<-coad.TF.list[unique(grep(paste(c("\\b.11A"),collapse = "|"), names(coad.TF.list)))]
+row.names(coad.TF.list.normal)<-sort(coad.TF.list$Hybridization.REF)
+coad.TF.list.normal.unlist<-as.numeric(as.character(unlist(coad.TF.list.normal[1:25,])))
+```
+Plots for COAD:
+```{r}
+#Normal:
+par(mfrow=c(2,1))
+coad.plot.normal.1<-plot(density(coad.TF.list.normal.unlist))
+coad.plot.tumor.1<-plot(density(coad.TF.list.tumor.unlist))
+#With log:
+coad.plot.normal.2<-plot(density(log1p(coad.TF.list.normal.unlist)))
+coad.plot.tumor.2<-plot(density(log1p(coad.TF.list.tumor.unlist)))
+#boxplot:
+coad.boxplot.normal.1<-boxplot(coad.TF.list.normal.unlist)
+coad.boxplot.tumor.1<-boxplot(coad.TF.list.tumor.unlist)
+```
+
+For LUAD:
+```{r}
+samples.names.luad<-sapply(strsplit(names(luad.TF.list), split = '.', fixed = TRUE), function(x) return(x[4]))
+table(samples.names.luad)
+```
+tumor
+```{r}
+luad.TF.list.tumor<-luad.TF.list[unique(grep(paste(c("\\b.01A","\\b.01B","\\b.02A"),collapse = "|"), names(luad.TF.list)))]
+row.names(luad.TF.list.tumor)<-sort(luad.TF.list$Hybridization.REF)
+luad.TF.list.tumor.unlist<-as.numeric(as.character(unlist(luad.TF.list.tumor[1:25,])))
+```
+normal
+```{r}
+luad.TF.list.normal<-luad.TF.list[unique(grep(paste(c("\\b.11A","\\b.11B"),collapse = "|"), names(luad.TF.list)))]
+row.names(luad.TF.list.normal)<-sort(luad.TF.list$Hybridization.REF)
+luad.TF.list.normal.unlist<-as.numeric(as.character(unlist(luad.TF.list.normal[1:25,])))
+```
+
+Plots for LUAD:
+```{r}
+#Normal:
+par(mfrow=c(2,1))
+luad.plot.normal.1<-plot(density(luad.TF.list.normal.unlist))
+luad.plot.tumor.1<-plot(density(luad.TF.list.tumor.unlist))
+#With log:
+luad.plot.normal.2<-plot(density(log1p(luad.TF.list.normal.unlist)))
+luad.plot.tumor.2<-plot(density(log1p(luad.TF.list.tumor.unlist)))
+#boxplot:
+luad.boxplot.normal.1<-boxplot(luad.TF.list.normal.unlist)
+luad.boxplot.tumor.1<-boxplot(luad.TF.list.tumor.unlist)
+```
+
+For PRAD:
+```{r}
+samples.names.prad<-sapply(strsplit(names(prad.TF.list), split = '.', fixed = TRUE), function(x) return(x[4]))
+table(samples.names.prad)
+```
+tumor
+```{r}
+prad.TF.list.tumor<-prad.TF.list[unique(grep(paste(c("\\b.01B","\\b.01A","\\b.06A"),collapse = "|"), names(prad.TF.list)))]
+row.names(prad.TF.list.tumor)<-sort(prad.TF.list$Hybridization.REF)
+prad.TF.list.tumor.unlist<-as.numeric(as.character(unlist(prad.TF.list.tumor[1:25,])))
+```
+normal
+```{r}
+prad.TF.list.normal<-prad.TF.list[unique(grep(paste(c("\\b.11A","\\b.11B"),collapse = "|"), names(prad.TF.list)))]
+row.names(prad.TF.list.normal)<-sort(prad.TF.list$Hybridization.REF)
+prad.TF.list.normal.unlist<-as.numeric(as.character(unlist(prad.TF.list.normal[1:25,])))
+```
+
+Plots for PRAD:
+```{r}
+#Normal:
+par(mfrow=c(2,1))
+prad.plot.normal.1<-plot(density(prad.TF.list.normal.unlist))
+prad.plot.tumor.1<-plot(density(prad.TF.list.tumor.unlist))
+#With log:
+prad.plot.normal.2<-plot(density(log1p(prad.TF.list.normal.unlist)))
+prad.plot.tumor.2<-plot(density(log1p(prad.TF.list.tumor.unlist)))
+#boxplot:
+prad.boxplot.normal.1<-boxplot(prad.TF.list.normal.unlist)
+prad.boxplot.tumor.1<-boxplot(prad.TF.list.tumor.unlist)
+```
