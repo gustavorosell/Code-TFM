@@ -71,6 +71,13 @@ cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
 mv fimo_transfac.txt ../data
 ```
 
+```{r}
+fimo_transfac<- unique(read.table(file.path('data', 'fimo_transfac.txt'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE))
+colnames(fimo_transfac)<- c("Number", "tf")
+```
+
 ##JASPAR
 Preparation of JASPAR lists:
 
@@ -86,7 +93,6 @@ jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
                                 stringsAsFactors = FALSE)$V4)
 
 length(jaspar_ids)
-View(jaspar_ids)
 ```
 Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HGNC symbols, in order to do that we use the package biomaRt from bioconductor (first installation will take some time):
 
