@@ -251,6 +251,10 @@ rm(header.coad)
 ```
 
 ```{r}
+coad.TF.list<-coad[unique(grep(paste(c(TF.list),collapse = "|"), rownames(coad))),]
+```
+
+```{r}
 coad.TF.list<-round(coad.TF.list)
 xy.coad<-DGEList(coad.TF.list)
 xo.coad <- order(rowSums(xy.coad$counts), decreasing=TRUE)
