@@ -1,6 +1,8 @@
 ---
 title: "Analysis of all TCGA"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -98,22 +100,22 @@ Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HG
 
 ```{r martconfig}
 # To show which marts are available
-listMarts()
+#listMarts()
 
 # You need the SNP mart
 mart <- useMart("ensembl")
 
 # Find homo sapiens
-listDatasets(mart)
+#listDatasets(mart)
 
 # This will be the dataset we want to use
 dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
 
 # Show available filters
-listFilters(dataset)
+#listFilters(dataset)
 
 # Now list all available attributes
-listAttributes(dataset)
+#listAttributes(dataset)
 
 # To get the ensembl gene id belonging to the SNPs
 hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol'), 
@@ -175,7 +177,7 @@ nrow(xy.brca)
 
 ```{r}
 xy.brca.norm<-calcNormFactors(xy.brca)
-xy.brca.norm$samples
+head(xy.brca.norm$samples)
 ```
 
 No es util este plot
@@ -186,19 +188,19 @@ plotMDS(xy.brca.norm)
 Para diferenciar, acorde a los barcode operaremos:
 ```{r}
 samples.names.brca<-sapply(strsplit(names(brca.TF.list), split = '-', fixed = TRUE), function(x) return(x[]))
-table(samples.names.brca)
+head(table(samples.names.brca))
 ```
 
 Design matrix:
 ```{r}
-data.frame(sample=(samples.names.brca))
+head(colnames(data.frame(sample=(samples.names.brca))), n=10)
 Normal.brca.A<-factor(c("11A" == samples.names.brca[4,]))
 Normal.brca.B<-factor(c("11B" == samples.names.brca[4,]))
 tumor.brca.A<-factor(c("01A" == samples.names.brca[4,]))
 tumor.brca.B<-factor(c("01B" == samples.names.brca[4,]))
 brca.matrix<-model.matrix(~Normal.brca.A+tumor.brca.A+Normal.brca.B+tumor.brca.B)
 rownames(brca.matrix)<-colnames(xy.brca.norm)
-brca.matrix
+head(brca.matrix)
 ```
 
 ```{r}
@@ -220,7 +222,8 @@ topTags(brca.lrt)
 
 ```{r}
 o.brca <- order(brca.lrt$table$PValue)
-cpm(xy.brca.disp)[o.brca[1:10],]
+brca.cpm<-cpm(xy.brca.disp)[o.brca[1:10],]
+head(colnames(brca.cpm))
 ```
 
 ```{r}
@@ -266,7 +269,7 @@ nrow(xy.coad)
 
 ```{r}
 xy.coad.norm<-calcNormFactors(xy.coad)
-xy.coad.norm$samples
+head(xy.coad.norm$samples)
 ```
 
 ```{r}
@@ -276,18 +279,18 @@ plotMDS(xy.coad.norm)
 Para diferenciar, acorde a los barcode operaremos:
 ```{r}
 samples.names.coad<-sapply(strsplit(names(coad.TF.list), split = '-', fixed = TRUE), function(x) return(x[]))
-table(samples.names.coad)
+head(table(samples.names.coad))
 ```
 
 Design matrix:
 ```{r}
-data.frame(sample=(samples.names.coad))
+head(colnames(data.frame(sample=(samples.names.coad))), n=10)
 Normal.coad<-factor(c("11A"== samples.names.coad[4,]))
 tumor.coad.A<-factor(c("01A"== samples.names.coad[4,]))
 tumor.coad.B<-factor(c("01B"== samples.names.coad[4,]))
 coad.matrix<-model.matrix(~Normal.coad+tumor.coad.A+tumor.coad.B)
 rownames(coad.matrix)<-colnames(xy.coad.norm)
-coad.matrix
+head(coad.matrix)
 ```
 
 ```{r}
@@ -309,7 +312,8 @@ topTags(coad.lrt)
 
 ```{r}
 o.coad <- order(coad.lrt$table$PValue)
-cpm(xy.coad.disp)[o.coad[1:10],]
+coad.cpm<-cpm(xy.coad.disp)[o.coad[1:10],]
+head(colnames(coad.cpm))
 ```
 
 ```{r}
@@ -358,7 +362,7 @@ nrow(xy.luad)
 
 ```{r}
 xy.luad.norm<-calcNormFactors(xy.luad)
-xy.luad.norm$samples
+head(xy.luad.norm$samples)
 ```
 
 Este plot no es util
@@ -369,12 +373,12 @@ plotMDS(xy.luad.norm)
 Para diferenciar, acorde a los barcode operaremos:
 ```{r}
 samples.names.luad<-sapply(strsplit(names(luad.TF.list), split = '-', fixed = TRUE), function(x) return(x[]))
-table(samples.names.luad)
+head(table(samples.names.luad))
 ```
 
 Design matrix:
 ```{r}
-data.frame(sample=(samples.names.luad))
+head(colnames(data.frame(sample=(samples.names.luad))))
 Normal.luad.A<-factor(c("11A"== samples.names.luad[4,]))
 Normal.luad.B<-factor(c("11B"== samples.names.luad[4,]))
 tumor.luad.A<-factor(c("01A"== samples.names.luad[4,]))
@@ -382,7 +386,7 @@ tumor.luad.B<-factor(c("01B"== samples.names.luad[4,]))
 tumor.luad.2A<-factor(c("02A"== samples.names.luad[4,]))
 luad.matrix<-model.matrix(~Normal.luad.A+tumor.luad.A+Normal.luad.B+tumor.luad.B)
 rownames(luad.matrix)<-colnames(xy.luad.norm)
-luad.matrix
+head(luad.matrix)
 ```
 
 Da error si admitimos el tumor 02A en la matriz, no asi como en el resto, son dos casos no se si se puede omitir
@@ -406,7 +410,8 @@ topTags(luad.lrt)
 
 ```{r}
 o.luad <- order(luad.lrt$table$PValue)
-cpm(xy.luad.disp)[o.luad[1:10],]
+luad.cpm<-cpm(xy.luad.disp)[o.luad[1:10],]
+head(colnames(luad.cpm))
 ```
 
 ```{r}
@@ -454,7 +459,7 @@ nrow(xy.prad)
 
 ```{r}
 xy.prad.norm<-calcNormFactors(xy.prad)
-xy.prad.norm$samples
+head(xy.prad.norm$samples)
 ```
 
 ```{r}
@@ -464,19 +469,19 @@ plotMDS(xy.prad.norm)
 Para diferenciar, acorde a los barcode operaremos:
 ```{r}
 samples.names.prad<-sapply(strsplit(names(prad.TF.list), split = '-', fixed = TRUE), function(x) return(x[]))
-table(samples.names.prad)
+head(table(samples.names.prad))
 ```
 
 Design matrix:
 ```{r}
-data.frame(sample=(samples.names.prad))
+head(colnames(data.frame(sample=(samples.names.prad))))
 Normal.prad.A<-factor(c("11A"== samples.names.prad[4,]))
 Normal.prad.B<-factor(c("11B"== samples.names.prad[4,]))
 tumor.prad.A<-factor(c("01A"== samples.names.prad[4,]))
 tumor.prad.B<-factor(c("01B"== samples.names.prad[4,]))
 prad.matrix<-model.matrix(~Normal.prad.A+tumor.prad.A+Normal.prad.B+tumor.prad.B)
 rownames(prad.matrix)<-colnames(xy.prad.norm)
-prad.matrix
+head(prad.matrix)
 ```
 
 ```{r}
@@ -497,7 +502,8 @@ topTags(prad.lrt)
 
 ```{r}
 o.prad <- order(prad.lrt$table$PValue)
-cpm(xy.prad.disp)[o.prad[1:10],]
+prad.cpm<-cpm(xy.prad.disp)[o.prad[1:10],]
+head(colnames(prad.cpm))
 ```
 
 ```{r}
