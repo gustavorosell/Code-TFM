@@ -118,7 +118,7 @@ dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
 #listAttributes(dataset)
 
 # To get the ensembl gene id belonging to the SNPs
-hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol'), 
+hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol','hgnc_id','hgnc_trans_name'), 
       filters = 'external_gene_name', 
       values = fimo_transfac$tf, 
       mart = dataset)
@@ -126,7 +126,7 @@ hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol'),
 hgnc.factor.fimo.list<-as.list(hgnc.factor.fimo.list)
 (hgnc.factor.fimo.list)
 
-hgnc.factor.jaspar.list<-getBM(attributes=c('hgnc_symbol'), 
+hgnc.factor.jaspar.list<-getBM(attributes=c('hgnc_symbol','hgnc_id','hgnc_trans_name'), 
       filters = 'external_gene_name', 
       values = jaspar_ids, 
       mart = dataset)
