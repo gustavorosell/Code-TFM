@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r librarys}
+```{r libraries}
 library(FirebrowseR)
 library(BiocInstaller)
 library(biomaRt)
@@ -18,6 +18,8 @@ library(knitr)
 library(rlist)
 library(edgeR)
 library(statmod)
+library(org.Hs.eg.db)
+library(RSQLite) #
 ```
 
 ```{r settings}
@@ -42,7 +44,7 @@ opts_chunk$set(fig.width = 12,
 ## FIMO
 Preparation of FIMO list:
 
-```{bash, eval = FALSE}
+```{bash, eval = TRUE}
 mkdir utils
 
 cd $_
@@ -71,6 +73,7 @@ cut -f4 test.bed | sort | uniq -c | head
 
 cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
 mv fimo_transfac.txt ../data
+
 ```
 
 ```{r}
@@ -83,6 +86,8 @@ colnames(fimo_transfac)<- c("Number", "tf")
 ##JASPAR
 Preparation of JASPAR lists:
 
+Mind that these are too few TF, let's find other TF genome wide scans!
+
 ```{r jaspar}
 cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
 utils/bigBedToBed fimo.hg19.jaspar_core-0.1.bb jaspar_hg19.bed'
@@ -90,12 +95,14 @@ system(cmd)
 file.rename('jaspar_hg19.bed', file.path('data', 'jaspar_hg19.bed'))
 file.remove('fimo.hg19.jaspar_core-0.1.bb')
 
+## @todo fix this these are extremely few!!!
 jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
                                 header = FALSE,
                                 stringsAsFactors = FALSE)$V4)
 
-length(jaspar_ids)
+print(length(jaspar_ids))
 ```
+
 Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HGNC symbols, in order to do that we use the package biomaRt from bioconductor (first installation will take some time):
 
 ```{r martconfig}
@@ -103,13 +110,15 @@ Once we have our TF list we need to transfer the TRANSFAC codes to gene_ID of HG
 #listMarts()
 
 # You need the SNP mart
-mart <- useMart("ensembl")
+## mart <- useMart("ensembl")
+mart <- useMart("ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
 
 # Find homo sapiens
 #listDatasets(mart)
 
 # This will be the dataset we want to use
-dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
+## dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
 
 # Show available filters
 #listFilters(dataset)
@@ -118,21 +127,60 @@ dataset <- useDataset("hsapiens_gene_ensembl", mart=mart)
 #listAttributes(dataset)
 
 # To get the ensembl gene id belonging to the SNPs
-hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol','hgnc_id','hgnc_trans_name'), 
+hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol', 
+                                          'entrezgene'), 
       filters = 'external_gene_name', 
       values = fimo_transfac$tf, 
-      mart = dataset)
+      mart = mart)
+
+print(length(fimo_transfac$tf))
+print(nrow(hgnc.factor.fimo.list))
 
 hgnc.factor.fimo.list<-as.list(hgnc.factor.fimo.list)
 (hgnc.factor.fimo.list)
 
-hgnc.factor.jaspar.list<-getBM(attributes=c('hgnc_symbol','hgnc_id','hgnc_trans_name'), 
+hgnc.factor.jaspar.list<-getBM(attributes=c('hgnc_symbol','entrezgene'), 
       filters = 'external_gene_name', 
       values = jaspar_ids, 
-      mart = dataset)
+      mart = mart)
+
+print(length(jaspar_ids))
+print(nrow(hgnc.factor.jaspar.list))
 
 hgnc.factor.jaspar.list<-as.list(hgnc.factor.jaspar.list)
 (hgnc.factor.jaspar.list)
+```
+
+Alternative to deal with synonyms: first SQL query to disambiguate HUGO synonyms from valid gene symbols; then querying biomart to get the entrez ID that might be the one present at TCGA's data.
+
+```{r sql}
+
+con <- org.Hs.eg_dbconn()
+
+stmt <- 'SELECT * FROM alias, gene_info WHERE alias._id == gene_info._id;'
+# execute the query on the database
+aliases <- dbGetQuery(con, stmt)
+candidates <- aliases[aliases$alias_symbol %in% fimo_transfac$tf,]
+valid_symbols <- unique(candidates$symbol)
+
+old.hgnc.factor.fimo.list <- hgnc.factor.fimo.list
+
+# To get the ensembl gene id belonging to the SNPs
+hgnc.factor.fimo.list<-getBM(attributes=c('hgnc_symbol', 
+                                          'entrezgene'), 
+      filters = 'external_gene_name', 
+      values = valid_symbols, 
+      mart = mart)
+
+print(length(fimo_transfac$tf))
+print(length(valid_symbols))
+print(nrow(hgnc.factor.fimo.list))
+## print(nrow(old.hgnc.factor.fimo.list[1]))
+
+hgnc.factor.fimo.list<-as.list(hgnc.factor.fimo.list)
+(hgnc.factor.fimo.list)
+
+
 ```
 
 The preparation of this lists is on the List.rmd
