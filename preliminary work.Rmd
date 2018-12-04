@@ -29,15 +29,6 @@ library(IRanges)
 ```
 
 ```{r settings}
-opts_chunk$set(fig.width = 12,
-               fig.height = 12,
-               cache = TRUE,
-               include = TRUE,
-               cache.lazy = FALSE,
-               warning = TRUE,
-               message = TRUE)
-
-
 TASK <- "grosell"
 HOME <- '~'
 WD <-  file.path(HOME, TASK) 
@@ -45,14 +36,13 @@ dir.create(WD, 'data')
 
 opts_chunk$set(fig.width = 12,
                fig.height = 12,
-               fig.path = file.path(WD, TASK, 'RmdFigs'),
-               output.dir = WD,
-               root.dir = WD,
                cache = TRUE,
                include = TRUE,
                cache.lazy = FALSE,
                warning = TRUE,
                message = TRUE)
+
+
 
 ```
 
@@ -99,22 +89,7 @@ colnames(fimo_transfac)<- c("Number", "tf")
       The idea I have is to leave the BRCA like these and then do the rest on a function maybe?
 
 ### BRCA
-```{r brca_download}
-download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/BRCA/20160128/gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'brca_rsem.tar.gz'))
 
-brca.fn <- grep('data.txt', untar(file.path(WD, 'brca_rsem.tar.gz'), list = TRUE), value = TRUE)
-untar(file.path(WD, 'brca_rsem.tar.gz'), files = brca.fn)
-
-header.brca <- read.table(file = brca.fn, sep = '\t', header = FALSE, nrow = 1,
-                     stringsAsFactors = FALSE)
-
-brca <- read.table(file = brca.fn, sep = '\t', header = TRUE, skip = 2)
-colnames(brca) <- header.brca[1,]
-
-rownames(brca) <- brca[,1]
-brca <- brca[,-1]
-rm(header.brca)
-```
 
 ### COAD
 ```{r coad_download}
@@ -135,40 +110,10 @@ rm(header.coad)
 ```
 
 ### LUAD:
-```{r luad_download}
-download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/LUAD/20160128/gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'luad_rsem.tar.gz'))
 
-luad.fn <- grep('data.txt', untar(file.path(WD, 'luad_rsem.tar.gz'), list = TRUE), value = TRUE)
-untar(file.path(WD, 'luad_rsem.tar.gz'), files = luad.fn)
-
-header.luad <- read.table(file = luad.fn, sep = '\t', header = FALSE, nrow = 1,
-                     stringsAsFactors = FALSE)
-
-luad <- read.table(file = luad.fn, sep = '\t', header = TRUE, skip = 2)
-colnames(luad) <- header.luad[1,]
-
-rownames(luad) <- luad[,1]
-luad <- luad[,-1]
-rm(header.luad)
-```
 
 ### PRAD
-```{r prad_download}
-download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/PRAD/20160128/gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'prad_rsem.tar.gz'))
 
-prad.fn <- grep('data.txt', untar(file.path(WD, 'prad_rsem.tar.gz'), list = TRUE), value = TRUE)
-untar(file.path(WD, 'prad_rsem.tar.gz'), files = prad.fn)
-
-header.prad <- read.table(file = prad.fn, sep = '\t', header = FALSE, nrow = 1,
-                     stringsAsFactors = FALSE)
-
-prad <- read.table(file = prad.fn, sep = '\t', header = TRUE, skip = 2)
-colnames(prad) <- header.prad[1,]
-
-rownames(prad) <- prad[,1]
-prad <- prad[,-1]
-rm(header.prad)
-```
 # Mapping
 
 ### Symbols
@@ -220,7 +165,7 @@ tf <- merge(mapping, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
 
 
 ## so tf$tcga will contain the TCGA identifiers (rownames of COAD)
-(coad[tf$tcga,])
+head(coad[tf$tcga,])
 
 ```
 
@@ -271,10 +216,10 @@ plotMDS(coad_dge_norm)
 
 Desing the matrix for the analysis:
 ```{r}
-#Normal<-factor(c("11"== coad_dge_norm$samples[5]))
+Normal<-factor(c("11"== coad_dge_norm$samples[5]))
 Tumor<-factor(c("01"== coad_dge_norm$samples[5]))
 
-matrix.model<-model.matrix(~Tumor)
+matrix.model<-model.matrix(~Normal)
 
 rownames(matrix.model)<-colnames(coad_dge_norm$counts)
 head(matrix.model)
@@ -288,7 +233,7 @@ What does this mean (biologically)?
 
 ```{r}
 xy.coad.disp<-estimateDisp(coad_dge_norm,matrix.model,robust = FALSE)
-#Says it is redundant the normal column so we erase it
+#Says it is redundant the Tumor column so we erase it
 xy.coad.disp$common.dispersion
 ```
 
@@ -337,7 +282,6 @@ coad.TF.list<-coad[sapply(strsplit(rownames(coad), '|', fixed = TRUE),
 coad_dge_norm_general<-DGEList(coad.TF.list)
 coad_dge_norm_general<-calcNormFactors(coad_dge_norm_general)
 coad_general<-estimateCommonDisp(coad_dge_norm_general)
-coad_general
 plotBCV(coad_general)
 ```
 
