@@ -200,3 +200,42 @@ plotMDS(coad_dge)
 ```
 
 Differential expression analysis goes next.
+
+```{r designmatrix}
+coldata$sample <- as.factor(as.character(coldata$sample))
+coldata$participant <- as.factor(as.character(coldata$participant))
+
+mmatrix <- model.matrix(~ 0 + sample + participant, data = coldata)
+
+rownames(mmatrix) <- coldata$barcode
+
+```
+
+```{r disp}
+
+coad_dge <- estimateDisp(coad_dge, mmatrix,robust = FALSE)
+```
+
+
+```{r}
+plotBCV(coad_dge)
+```
+
+
+
+```{r}
+coad_fit <-glmFit( coad_dge, mmatrix)
+coad_fit <- glmLRT(coad_fit,  contrast= 'specify the contrast') # update the contrast
+## topTags(coad_fit)
+
+```
+
+
+```{r}
+## summary(decideTests(coad_fit))
+```
+
+```{r}
+## plotMD(coad_fit)
+## abline(h=c(-1, 1), col="green")
+```
