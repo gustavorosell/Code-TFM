@@ -207,7 +207,7 @@ coad_dge <- DGEList(coad.barcode, samples = coad.data.2)
 
 Norm factors
 ```{r}
-coad_dge_norm <- calcNormFactors(coad_dge)
+coad_dge <- calcNormFactors(coad_dge)
 ```
 
 ```{r}
@@ -215,61 +215,46 @@ plotMDS(coad_dge_norm)
 ```
 
 Desing the matrix for the analysis:
-```{r}
-Normal<-factor(c("11"== coad_dge_norm$samples[5]))
-Tumor<-factor(c("01"== coad_dge_norm$samples[5]))
 
-matrix.model<-model.matrix(~Normal)
 
-rownames(matrix.model)<-colnames(coad_dge_norm$counts)
-head(matrix.model)
-dim(matrix.model)
+```{r designmatrix}
+coldata$sample <- as.factor(as.character(coldata$sample))
+coldata$participant <- as.factor(as.character(coldata$participant))
+mmatrix <- model.matrix(~ 0 + sample + participant, data = coldata)
+rownames(mmatrix) <- coldata$barcode
+dim(mmatrix)
 ```
-Do tumors match tumors and normals match normals? Yes they do, confirmed but only in the general mode.
 
-Or do samples from the same participant cluster together? I thought of the possibility but i dont know if that gives us additional information, we dont have other information about the participant we could use to, like if he/she is dead or alive or other kind of info, like weight, smoker or not (LUAD), etc...
+```{r disp}
+coad_dge <- estimateDisp(coad_dge, mmatrix,robust = FALSE)
+```
 
-What does this mean (biologically)? 
 
 ```{r}
-xy.coad.disp<-estimateDisp(coad_dge_norm,matrix.model,robust = FALSE)
-#Says it is redundant the Tumor column so we erase it
-xy.coad.disp$common.dispersion
+plotBCV(coad_dge)
 ```
 
 ```{r}
-plotBCV(xy.coad.disp)
+coad_fit <-glmFit( coad_dge, mmatrix)
+contrast<-c(1,-1,rep(0,25))
+coad_fit.1 <- glmLRT(coad_fit, contrast = contrast) # update the contrast
+## topTags(coad_fit)
+
 ```
 
 Differential expression:
 ```{r}
-coad.fit<-glmFit(xy.coad.disp, matrix.model)
-coad.lrt<-glmLRT(coad.fit)
-topTags(coad.lrt)
+summary(decideTests(coad_fit.1))
 ```
 
 ```{r}
-o.coad <- order(coad.lrt$table$PValue)
-coad.cpm<-cpm(xy.coad.disp)[o.coad[1:10],]
-head(colnames(coad.cpm))
-```
-
-```{r}
-summary(decideTests(coad.lrt))
-```
-
-```{r}
-plotMD(coad.lrt)
+plotMD(coad_fit.1)
 abline(h=c(-1, 1), col="green")
 ```
 
+
 ### Normal vs Tumor, general:
-coad.data <- data.frame(barcode = colnames(coad),
-                      sample = strtrim(sapply(strsplit(colnames(coad), '-', fixed = TRUE),
-                                              function(x) return(x[4])), 2),
-                      participant = sapply(strsplit(colnames(coad), '-', fixed = TRUE),
-                                              function(x) return(x[3]))
-                      )
+
 
 ```{r}
 #this way we split the rownames between the hgnc symbol and their number:
