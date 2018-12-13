@@ -19,7 +19,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## library(FirebrowseR)
 ## library(BiocInstaller)
 library(biomaRt)
-library("knitr")
+library(knitr)
 library(rlist)
  library(edgeR)
 library(statmod)
@@ -80,7 +80,7 @@ mv fimo_transfac.txt ../data
 ```
 ### Adding the Fimo list into R
 ```{r}
-fimo_transfac <- unique(read.table('data',
+fimo_transfac<- unique(read.table(file.path('data', 'fimo_transfac.txt'),
                                 header = FALSE,
                                 stringsAsFactors = FALSE))
 colnames(fimo_transfac)<- c("Number", "tf")
@@ -341,17 +341,6 @@ library(EnsDb.Hsapiens.v75)
 annoData <- toGRanges(EnsDb.Hsapiens.v75)
 ```
 
-
-```{r}
-
-library(TxDb.Hsapiens.UCSC.hg19.knownGene)
-aCR<-assignChromosomeRegion(peaks, nucleotideLevel=FALSE, 
-                           precedence=c("Promoters", "immediateDownstream", 
-                                         "fiveUTRs", "threeUTRs", 
-                                         "Exons", "Introns"), 
-                           TxDb=TxDb.Hsapiens.UCSC.hg19.knownGene)
-barplot(aCR$percentage, las=3)
-```
 
 ```{r}
 seqlevelsStyle(peaks) <- seqlevelsStyle(annoData)
