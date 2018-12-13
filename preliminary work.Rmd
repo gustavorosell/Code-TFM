@@ -18,14 +18,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r libraries}
 ## library(FirebrowseR)
 ## library(BiocInstaller)
-library(biomaRt)
-library(knitr)
-## library(rlist)
-library(edgeR)
-## library(statmod)
-library(org.Hs.eg.db)
-library(RSQLite) #
-library(IRanges)
+##library(biomaRt)
+library("knitr")
+##library(rlist)
+## library(edgeR)
+##library(statmod)
+# library(org.Hs.eg.db)
+# library(RSQLite) #
+##library(IRanges)
+
+#library(ChIPpeakAnno)
+# library(edgeR)
 ```
 
 ```{r settings}
@@ -207,7 +210,7 @@ coad_dge <- DGEList(coad.barcode, samples = coad.data.2)
 
 Norm factors
 ```{r}
-coad_dge_norm <- calcNormFactors(coad_dge)
+coad_dge <- calcNormFactors(coad_dge)
 ```
 
 ```{r}
@@ -215,61 +218,46 @@ plotMDS(coad_dge_norm)
 ```
 
 Desing the matrix for the analysis:
-```{r}
-Normal<-factor(c("11"== coad_dge_norm$samples[5]))
-Tumor<-factor(c("01"== coad_dge_norm$samples[5]))
 
-matrix.model<-model.matrix(~Normal)
 
-rownames(matrix.model)<-colnames(coad_dge_norm$counts)
-head(matrix.model)
-dim(matrix.model)
+```{r designmatrix}
+coldata$sample <- as.factor(as.character(coldata$sample))
+coldata$participant <- as.factor(as.character(coldata$participant))
+mmatrix <- model.matrix(~ 0 + sample + participant, data = coldata)
+rownames(mmatrix) <- coldata$barcode
+dim(mmatrix)
 ```
-Do tumors match tumors and normals match normals? Yes they do, confirmed but only in the general mode.
 
-Or do samples from the same participant cluster together? I thought of the possibility but i dont know if that gives us additional information, we dont have other information about the participant we could use to, like if he/she is dead or alive or other kind of info, like weight, smoker or not (LUAD), etc...
+```{r disp}
+coad_dge <- estimateDisp(coad_dge, mmatrix,robust = FALSE)
+```
 
-What does this mean (biologically)? 
 
 ```{r}
-xy.coad.disp<-estimateDisp(coad_dge_norm,matrix.model,robust = FALSE)
-#Says it is redundant the Tumor column so we erase it
-xy.coad.disp$common.dispersion
+plotBCV(coad_dge)
 ```
 
 ```{r}
-plotBCV(xy.coad.disp)
+coad_fit <-glmFit( coad_dge, mmatrix)
+contrast<-c(1,-1,rep(0,25))
+coad_fit.1 <- glmLRT(coad_fit, contrast = contrast) # update the contrast
+## topTags(coad_fit)
+
 ```
 
 Differential expression:
 ```{r}
-coad.fit<-glmFit(xy.coad.disp, matrix.model)
-coad.lrt<-glmLRT(coad.fit)
-topTags(coad.lrt)
+summary(decideTests(coad_fit.1))
 ```
 
 ```{r}
-o.coad <- order(coad.lrt$table$PValue)
-coad.cpm<-cpm(xy.coad.disp)[o.coad[1:10],]
-head(colnames(coad.cpm))
-```
-
-```{r}
-summary(decideTests(coad.lrt))
-```
-
-```{r}
-plotMD(coad.lrt)
+plotMD(coad_fit.1)
 abline(h=c(-1, 1), col="green")
 ```
 
+
 ### Normal vs Tumor, general:
-coad.data <- data.frame(barcode = colnames(coad),
-                      sample = strtrim(sapply(strsplit(colnames(coad), '-', fixed = TRUE),
-                                              function(x) return(x[4])), 2),
-                      participant = sapply(strsplit(colnames(coad), '-', fixed = TRUE),
-                                              function(x) return(x[3]))
-                      )
+
 
 ```{r}
 #this way we split the rownames between the hgnc symbol and their number:
@@ -319,3 +307,96 @@ summary(decideTests(coad.lrt.g))
 plotMD(coad.lrt.g)
 abline(h=c(-1, 1), col="green")
 ```
+
+# Finding the nearest genes:
+
+```{r biomart_GTF}
+mart <- useMart("ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+
+
+GTF <- getBM(attributes=c('chromosome_name',
+                          'start_position',
+                          'end_position',
+                          'strand'
+                          ), 
+                   filters = 'hgnc_symbol', 
+                   values = entrez_tf$hgnc_symbol,
+                   mart = mart)
+
+# Show available filters
+#listFilters(dataset)
+
+# Now list all available attributes
+listAttributes(dataset)
+```
+
+```{r}
+colnames(GTF)<-c("chromosome","start","end","strand")
+
+peaks<-toGRanges(GTF,format="GFF")
+```
+
+```{r}
+library(EnsDb.Hsapiens.v75)
+annoData <- toGRanges(EnsDb.Hsapiens.v75)
+```
+
+
+```{r}
+
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+aCR<-assignChromosomeRegion(peaks, nucleotideLevel=FALSE, 
+                           precedence=c("Promoters", "immediateDownstream", 
+                                         "fiveUTRs", "threeUTRs", 
+                                         "Exons", "Introns"), 
+                           TxDb=TxDb.Hsapiens.UCSC.hg19.knownGene)
+barplot(aCR$percentage, las=3)
+```
+
+```{r}
+seqlevelsStyle(peaks) <- seqlevelsStyle(annoData)
+## do annotation by nearest TSS
+anno <- annotatePeakInBatch(peaks, AnnotationData=annoData)
+```
+
+```{r}
+overlaps.anno <- annotatePeakInBatch(anno, 
+                                 AnnotationData=annoData, 
+                                 output="nearestBiDirectionalPromoters",
+                                 bindingRegion=c(-2000, 500))
+library(org.Hs.eg.db)
+overlaps.anno <- addGeneIDs(overlaps.anno,
+                            "org.Hs.eg.db",
+                            IDs2Add = "entrez_id")
+```
+
+
+```{r}
+write.csv(as.data.frame(unname(overlaps.anno)), "anno.csv")
+```
+
+
+```{r}
+pie1(table(overlaps.anno$insideFeature))
+```
+
+```{r}
+library(org.Hs.eg.db)
+anno.1 <- addGeneIDs(overlaps.anno, orgAnn="org.Hs.eg.db", 
+                   feature_id_type="ensembl_gene_id",
+                   IDs2Add=c("symbol"))
+head(anno.1)
+anno.1$gene_name
+```
+
+```{r}
+over <- getEnrichedGO(overlaps.anno, orgAnn="org.Hs.eg.db", 
+                     maxP=.05, minGOterm=10, 
+                     multiAdjMethod="BH", condense=TRUE)
+head(over[["bp"]][, -c(3, 10)])
+over$bp$go.term
+```
+
+
+
