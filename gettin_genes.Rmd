@@ -1,0 +1,176 @@
+---
+title: "Getting_genes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{bash, eval = TRUE}
+mkdir -p utils 
+
+cd $_
+# retrieving transfac+fimo
+wget -q https://noble.gs.washington.edu/custom-tracks/fimo.hg19.transfac-0.1.bb
+
+# getting the exec for linux 64 bits
+
+rsync -aP rsync://hgdownload.soe.ucsc.edu/genome/admin/exe/linux.x86_64/bigBedToBed .
+
+# making it runnable
+
+chmod a+x bigBedToBed
+
+# converting to bed
+
+./bigBedToBed fimo.hg19.transfac-0.1.bb test.bed
+
+# checking how a bedfile looks like
+
+head test.bed
+
+cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
+mv fimo_transfac.txt ../data
+```
+
+```{r jaspar}
+cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
+utils/bigBedToBed fimo.hg19.jaspar_core-0.1.bb jaspar_hg19.bed'
+system(cmd)
+file.rename('jaspar_hg19.bed', file.path('data', 'jaspar_hg19.bed'))
+file.remove('fimo.hg19.jaspar_core-0.1.bb')
+
+## @todo fix this these are extremely few!!!
+jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE)$V4)
+
+
+```
+
+
+```{r}
+test.bed<-read.delim("test.bed", header = FALSE)
+head(test.bed)
+```
+
+```{r}
+jaspar.prueba<-unique(read.table(file.path('data', 'jaspar_hg19.bed')))
+head(jaspar.prueba)
+```
+De esta manera tenemos los genes que regulan estos TF, la idea si no me equivoco es seleccionar los nuestros, para ello:
+
+```{r}
+fimo_transfac <- unique(read.table(file.path('data', 'fimo_transfac.txt'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE))
+colnames(fimo_transfac)<- c("Number", "tf")
+```
+
+```{r mapping}
+con <- org.Hs.eg_dbconn()
+
+stmt <- 'SELECT * FROM alias, gene_info WHERE alias._id == gene_info._id;'
+# execute the query on the database
+aliases <- dbGetQuery(con, stmt)
+
+candidates <- aliases[aliases$alias_symbol %in% toupper(fimo_transfac$tf),]
+candidates2 <- aliases[aliases$symbol %in% toupper(fimo_transfac$tf),]
+
+valid_symbols <- unique(candidates$symbol, candidates2$symbol)
+```
+
+```{r biomart_entrez}
+mart <- useMart("ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+
+
+entrez_tf <- getBM(attributes=c('hgnc_symbol', 
+                                'entrezgene'), 
+                   filters = 'external_gene_name', 
+                   values = valid_symbols,
+                   mart = mart)
+
+```
+Para FIMO
+```{r}
+test.bed.1<-test.bed[test.bed$V4 %in% entrez_tf$hgnc_symbol,]
+test.bed.1<-test.bed.1[unique(test.bed.1$V3),]
+test.bed.1<-test.bed.1[complete.cases(test.bed.1),]
+```
+
+```{r}
+library(ChIPpeakAnno)
+colnames(test.bed.1)<-c("chromosome","start","end","id","nb","strand")
+bed.ranges<-toGRanges(test.bed.1, format= "BED", header= FALSE)
+```
+
+```{r}
+library(EnsDb.Hsapiens.v75)
+annoData <- toGRanges(EnsDb.Hsapiens.v75, feature= "gene")
+```
+
+```{r warning=FALSE}
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+aCR<-assignChromosomeRegion(bed.ranges, nucleotideLevel=FALSE, 
+                           precedence=c("Promoters", "immediateDownstream", 
+                                         "fiveUTRs", "threeUTRs", 
+                                         "Exons", "Introns"), 
+                           TxDb=TxDb.Hsapiens.UCSC.hg19.knownGene)
+barplot(aCR$percentage, las=3)
+```
+
+
+```{r warning=FALSE}
+overlaps.anno <- annotatePeakInBatch(bed.ranges, 
+                                     AnnotationData=annoData, 
+                                     output="nearestBiDirectionalPromoters",
+                                     bindingRegion=c(-2000, 500))
+library(org.Hs.eg.db)
+overlaps.anno <- addGeneIDs(overlaps.anno,
+                            "org.Hs.eg.db",
+                            IDs2Add = "entrez_id")
+```
+
+
+```{r}
+unique(head(overlaps.anno$gene_name))
+```
+
+
+
+
+Para JASPAR:
+```{r}
+jaspar.prueba.1<-jaspar.prueba[jaspar.prueba$V4 %in% jaspar_ids,]
+jaspar.prueba.1<-jaspar.prueba.1[unique(jaspar.prueba.1$V3),]
+jaspar.prueba.1<-jaspar.prueba.1[complete.cases(jaspar.prueba.1),]
+```
+
+```{r}
+
+colnames(jaspar.prueba.1)<-c("chromosome","start","end","id","nb","strand")
+jaspar.ranges<-toGRanges(jaspar.prueba.1, format= "BED", header= FALSE)
+```
+
+```{r}
+annoData <- toGRanges(EnsDb.Hsapiens.v75, feature= "gene")
+```
+
+
+```{r warning=FALSE}
+overlaps.anno.jaspar <- annotatePeakInBatch(jaspar.ranges, 
+                                     AnnotationData=annoData, 
+                                     output="nearestBiDirectionalPromoters",
+                                     bindingRegion=c(-2000, 500))
+
+overlaps.anno.jaspar <- addGeneIDs(overlaps.anno.jaspar,
+                            "org.Hs.eg.db",
+                            IDs2Add = "entrez_id")
+```
+
+
+```{r}
+unique(head(overlaps.anno.jaspar$gene_name))
+```
