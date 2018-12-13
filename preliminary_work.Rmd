@@ -18,17 +18,16 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r libraries}
 ## library(FirebrowseR)
 ## library(BiocInstaller)
-##library(biomaRt)
+library(biomaRt)
 library("knitr")
-##library(rlist)
-## library(edgeR)
-##library(statmod)
-# library(org.Hs.eg.db)
-# library(RSQLite) #
-##library(IRanges)
+library(rlist)
+ library(edgeR)
+library(statmod)
+ library(org.Hs.eg.db)
+ library(RSQLite) #
+library(IRanges)
+library(ChIPpeakAnno)
 
-#library(ChIPpeakAnno)
-# library(edgeR)
 ```
 
 ```{r settings}
@@ -81,7 +80,7 @@ mv fimo_transfac.txt ../data
 ```
 ### Adding the Fimo list into R
 ```{r}
-fimo_transfac <- unique(read.table(file.path('data', 'fimo_transfac.txt'),
+fimo_transfac <- unique(read.table('data',
                                 header = FALSE,
                                 stringsAsFactors = FALSE))
 colnames(fimo_transfac)<- c("Number", "tf")
@@ -214,7 +213,7 @@ coad_dge <- calcNormFactors(coad_dge)
 ```
 
 ```{r}
-plotMDS(coad_dge_norm)
+plotMDS(coad_dge)
 ```
 
 Desing the matrix for the analysis:
@@ -329,7 +328,6 @@ GTF <- getBM(attributes=c('chromosome_name',
 #listFilters(dataset)
 
 # Now list all available attributes
-listAttributes(dataset)
 ```
 
 ```{r}
