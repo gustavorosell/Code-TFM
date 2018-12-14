@@ -1,0 +1,413 @@
+---
+title: "Final_work_coad"
+output:
+  html_document:
+    keep_md: false
+    toc: true
+    toc_float: true
+    toc_depth: 4
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Setup
+
+```{r libraries}
+library(biomaRt)
+library("knitr")
+library(rlist)
+library(edgeR)
+library(statmod)
+library(org.Hs.eg.db)
+library(RSQLite) #
+library(IRanges)
+library(ChIPpeakAnno)
+```
+
+```{r settings}
+TASK <- "grosell"
+HOME <- '~'
+WD <-  file.path(HOME, TASK) 
+dir.create(WD, 'data')
+
+opts_chunk$set(fig.width = 12,
+               fig.height = 12,
+               cache = TRUE,
+               include = TRUE,
+               cache.lazy = FALSE,
+               warning = TRUE,
+               message = TRUE)
+
+
+
+```
+
+# TFBS data retrieval
+
+For transfac + fimo scans
+
+### Fimo download:
+
+```{bash, eval = TRUE}
+mkdir -p utils 
+
+cd $_
+# retrieving transfac+fimo
+wget -q https://noble.gs.washington.edu/custom-tracks/fimo.hg19.transfac-0.1.bb
+
+# getting the exec for linux 64 bits
+
+rsync -aP rsync://hgdownload.soe.ucsc.edu/genome/admin/exe/linux.x86_64/bigBedToBed .
+
+# making it runnable
+
+chmod a+x bigBedToBed
+
+# converting to bed
+
+./bigBedToBed fimo.hg19.transfac-0.1.bb test.bed
+
+# checking how a bedfile looks like
+
+head test.bed
+
+cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
+sort test.bed | uniq -c | sed 's/^\s*//' > fimo_transfac_1.txt
+mv fimo_transfac.txt ../data
+mv fimo_transfac_1.txt ../data
+```
+
+### Adding the Fimo list into R
+
+```{r}
+fimo_transfac <- unique(read.table(file.path('data', 'fimo_transfac.txt'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE))
+colnames(fimo_transfac)<- c("Number", "tf")
+```
+
+```{r}
+fimo_transfac_1 <- read.table(file.path('data', 'fimo_transfac_1.txt'), header = FALSE)
+fimo_transfac_1<-fimo_transfac_1[,-1]
+colnames(fimo_transfac_1)<-c("chromosome","start","end","id","nb","strand")
+```
+
+```{r jaspar}
+cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
+utils/bigBedToBed fimo.hg19.jaspar_core-0.1.bb jaspar_hg19.bed'
+system(cmd)
+file.rename('jaspar_hg19.bed', file.path('data', 'jaspar_hg19.bed'))
+file.remove('fimo.hg19.jaspar_core-0.1.bb')
+
+## @todo fix this these are extremely few!!!
+jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE)$V4)
+jaspar.prueba<-unique(read.table(file.path('data', 'jaspar_hg19.bed')))
+
+```
+
+# Mapping
+
+### Symbols
+
+We would like to transform TRANSFAC names to HUGO symbols (we'll check differential expression of these using TCGA RSEM data)
+Transformation of Fimo list (TRANSFAC names) to match our TCGA RSEM data:
+```{r mapping}
+con <- org.Hs.eg_dbconn()
+
+stmt <- 'SELECT * FROM alias, gene_info WHERE alias._id == gene_info._id;'
+# execute the query on the database
+aliases <- dbGetQuery(con, stmt)
+
+candidates <- aliases[aliases$alias_symbol %in% toupper(fimo_transfac$tf),]
+candidates2 <- aliases[aliases$symbol %in% toupper(fimo_transfac$tf),]
+
+valid_symbols <- unique(candidates$symbol, candidates2$symbol)
+```
+
+### Entrez IDs
+Gene symbols to Entrez gene ids (TCGA RSEMs also provide these identifiers)
+
+```{r biomart_entrez}
+mart <- useMart("ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+
+
+entrez_tf <- getBM(attributes=c('hgnc_symbol', 
+                                'entrezgene'), 
+                   filters = 'external_gene_name', 
+                   values = valid_symbols,
+                   mart = mart)
+
+```
+
+### For FIMO:
+
+```{r}
+fimo_transfac_1<-fimo_transfac_1[fimo_transfac_1$id %in% entrez_tf$hgnc_symbol,]
+fimo_transfac_1<-fimo_transfac_1[unique(fimo_transfac_1$start),]
+fimo_transfac_1<-fimo_transfac_1[complete.cases(fimo_transfac_1),]
+```
+
+```{r}
+library(ChIPpeakAnno)
+bed.ranges.fimo<-toGRanges(fimo_transfac_1, format= "BED", header= FALSE)
+```
+
+```{r}
+library(EnsDb.Hsapiens.v75)
+annoData <- toGRanges(EnsDb.Hsapiens.v75, feature= "gene")
+```
+
+```{r warning=FALSE}
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+aCR<-assignChromosomeRegion(bed.ranges.fimo, nucleotideLevel=FALSE, 
+                           precedence=c("Promoters", "immediateDownstream", 
+                                         "fiveUTRs", "threeUTRs", 
+                                         "Exons", "Introns"), 
+                           TxDb=TxDb.Hsapiens.UCSC.hg19.knownGene)
+barplot(aCR$percentage, las=3)
+```
+
+```{r warning=FALSE}
+overlaps.anno.fimo <- annotatePeakInBatch(bed.ranges.fimo, 
+                                     AnnotationData=annoData, 
+                                     output="nearestBiDirectionalPromoters",
+                                     bindingRegion=c(-2000, 500))
+library(org.Hs.eg.db)
+overlaps.anno.fimo <- addGeneIDs(overlaps.anno.fimo,
+                            "org.Hs.eg.db",
+                            IDs2Add = "entrez_id")
+```
+
+### For JASPAR:
+
+```{r}
+colnames(jaspar.prueba)<-c("chromosome","start","end","id","nb","strand")
+jaspar.prueba.1<-jaspar.prueba[jaspar.prueba$id %in% jaspar_ids,]
+jaspar.prueba.1<-jaspar.prueba.1[unique(jaspar.prueba.1$start),]
+jaspar.prueba.1<-jaspar.prueba.1[complete.cases(jaspar.prueba.1),]
+```
+
+```{r}
+jaspar.ranges<-toGRanges(jaspar.prueba.1, format= "BED", header= FALSE)
+```
+
+```{r}
+annoData <- toGRanges(EnsDb.Hsapiens.v75, feature= "gene")
+```
+
+
+```{r warning=FALSE}
+overlaps.anno.jaspar <- annotatePeakInBatch(jaspar.ranges, 
+                                     AnnotationData=annoData, 
+                                     output="nearestBiDirectionalPromoters",
+                                     bindingRegion=c(-2000, 500))
+
+overlaps.anno.jaspar <- addGeneIDs(overlaps.anno.jaspar,
+                            "org.Hs.eg.db",
+                            IDs2Add = "entrez_id")
+```
+
+# RSEM download:
+    
+
+### BRCA
+
+
+### COAD
+```{r coad_download}
+download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/COAD/20160128/gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'coad_rsem.tar.gz'))
+
+coad.fn <- grep('data.txt', untar(file.path(WD, 'coad_rsem.tar.gz'), list = TRUE), value = TRUE)
+untar(file.path(WD, 'coad_rsem.tar.gz'), files = coad.fn)
+
+header.coad <- read.table(file = coad.fn, sep = '\t', header = FALSE, nrow = 1,
+                     stringsAsFactors = FALSE)
+
+coad <- read.table(file = coad.fn, sep = '\t', header = TRUE, skip = 2)
+colnames(coad) <- header.coad[1,]
+
+rownames(coad) <- coad[,1]
+coad <- coad[,-1]
+rm(header.coad)
+```
+
+### LUAD:
+
+
+### PRAD
+
+
+# Defining the mapping function:
+
+Getting a dictionary of TF with their TCGA id, Entrez id and standard gene symbol for which we know the TRANSFAC/FIMO motif.
+          TO DO WITH A GENERIC FUNCTION, SO WE CAN USE IN THE IN A LITTLE CHUNK FOR EACH TCGA DATA.
+          
+```{r}
+mapping <- data.frame(tcga = rownames(coad),
+                      entrez = sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                      function(x) return(x[2])),
+                      symbol = sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                      function(x) return(x[1])))
+
+tf <- merge(mapping, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
+
+
+## so tf$tcga will contain the TCGA identifiers (rownames of COAD)
+head(coad[tf$tcga,])
+
+```
+
+# Analysis:
+
+I have in mind we can try to compare between normal and tumor and then compare between participants, lets see the preliminary results what they show:
+
+## Diff expression:
+
+###Normal vs tumor, paired mode:
+
+
+Getting sort of counts from RSEMs (this is not correct because we are just rounding RSEMs!) and generating a DGE object only for those samples that come from the same patient, because we will compare tumors against matched normals.
+
+```{r}
+coad.r <- round(coad) 
+
+coad.data <- data.frame(barcode = colnames(coad),
+                      sample = strtrim(sapply(strsplit(colnames(coad), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2),
+                      participant = sapply(strsplit(colnames(coad), '-', fixed = TRUE),
+                                              function(x) return(x[3]))
+                      )
+#Participants that have normal vs tumor tissue comparision:
+head(coad.data)
+dim(coad.data)
+table(coad.data$sample)
+## only normals and primary tumors
+coad.data.1 <- coad.data[coad.data$sample %in% c('01', '11'),]
+
+## only matched normal and tumor from the same participant
+selected <- coad.data.1$participant[duplicated(coad.data.1$participant)]
+coad.data.2 <- coad.data.1[coad.data.1$participant %in% selected,]
+coad.barcode <- coad[,coad.data.2$barcode]
+
+coad_dge <- DGEList(coad.barcode, samples = coad.data.2)
+```
+
+Norm factors
+```{r}
+coad_dge <- calcNormFactors(coad_dge)
+```
+
+```{r}
+plotMDS(coad_dge_norm)
+```
+
+Desing the matrix for the analysis:
+
+
+```{r designmatrix}
+coad.data.2$sample <- as.factor(as.character(coad.data.2$sample))
+coad.data.2$participant <- as.factor(as.character(coad.data.2$participant))
+mmatrix <- model.matrix(~ 0 + sample + participant, data = coad.data.2)
+rownames(mmatrix) <- coad.data.2$barcode
+dim(mmatrix)
+
+```
+
+```{r disp}
+coad_dge <- estimateDisp(coad_dge, mmatrix,robust = FALSE)
+```
+
+```{r}
+plotBCV(coad_dge)
+```
+
+```{r}
+coad_fit <-glmFit( coad_dge, mmatrix)
+contrast<-c(1,-1,rep(0,25))
+coad_fit.1 <- glmLRT(coad_fit, contrast = contrast)
+topTags(coad_fit.1)
+```
+
+Differential expression:
+```{r}
+summary(decideTests(coad_fit.1))
+```
+
+```{r}
+plotMD(coad_fit.1)
+abline(h=c(-1, 1), col="green")
+```
+
+### Normal vs Tumor, general:
+
+```{r}
+#this way we split the rownames between the hgnc symbol and their number:
+coad.TF.list<-coad[sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                              function(x) return(x[2])) %in% entrez_tf$entrezgene,]
+
+```
+
+```{r}
+coad_dge_norm_general<-DGEList(coad.TF.list)
+coad_dge_norm_general<-calcNormFactors(coad_dge_norm_general)
+coad_general<-estimateCommonDisp(coad_dge_norm_general)
+```
+
+```{r}
+Normal.g<-factor(c("11"== strtrim(sapply(strsplit(colnames(coad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+Tumor.g<-factor(c("01"== strtrim(sapply(strsplit(colnames(coad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+
+matrix.model.g<-model.matrix(~Tumor.g+Normal.g)
+
+rownames(matrix.model.g)<-colnames(coad_dge_norm_general$counts)
+head(matrix.model.g)
+dim(matrix.model.g)
+```
+
+Differential expression:
+```{r}
+coad.fit.g<-glmFit(coad_general, matrix.model.g)
+coad.lrt.g<-glmLRT(coad.fit.g)
+topTags(coad.lrt.g)
+```
+
+```{r}
+o.coad.g <- order(coad.lrt.g$table$PValue)
+coad.cpm.g<-cpm(coad_general)[o.coad.g[1:10],]
+head(colnames(coad.cpm.g))
+```
+
+```{r}
+summary(decideTests(coad.lrt.g))
+```
+
+```{r}
+plotMD(coad.lrt.g)
+abline(h=c(-1, 1), col="green")
+```
+
+# Finding the nearest genes:
+For the paired comparison:
+
+```{r}
+prueba.coad<-(coad_fit.1[sapply(strsplit(rownames(coad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% overlaps.anno.fimo$gene_name,])
+
+
+plotMD(prueba.coad)
+topTags(prueba.coad)
+topTags(coad.lrt.g)
+overlaps.anno.fimo$id
+prueba.coad$table
+```
+
+
