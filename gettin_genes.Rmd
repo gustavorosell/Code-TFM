@@ -7,6 +7,40 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r libraries}
+## library(FirebrowseR)
+## library(BiocInstaller)
+library(biomaRt)
+library("knitr")
+library(rlist)
+ library(edgeR)
+library(statmod)
+ library(org.Hs.eg.db)
+ library(RSQLite) #
+library(IRanges)
+library(ChIPpeakAnno)
+```
+
+```{r settings}
+library("knitr")
+TASK <- "grosell"
+HOME <- '~'
+WD <-  file.path(HOME, TASK) 
+dir.create(WD, 'data')
+
+opts_chunk$set(fig.width = 12,
+               fig.height = 12,
+               cache = TRUE,
+               include = TRUE,
+               cache.lazy = FALSE,
+               warning = TRUE,
+               message = TRUE)
+
+
+
+```
+
+
 ```{bash, eval = TRUE}
 mkdir -p utils 
 
@@ -31,8 +65,19 @@ chmod a+x bigBedToBed
 head test.bed
 
 cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
+sort test.bed | uniq -c | sed 's/^\s*//' > fimo_transfac_1.txt
 mv fimo_transfac.txt ../data
+mv fimo_transfac_1.txt ../data
 ```
+
+```{r}
+fimo_transfac_1 <- read.table(file.path('data', 'fimo_transfac_1.txt'), header = FALSE)
+fimo_transfac_1<-fimo_transfac_1[,-1]
+
+colnames(fimo_transfac_1)<-c("chromosome","start","end","id","nb","strand")
+head(fimo_transfac_1)
+```
+
 
 ```{r jaspar}
 cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
@@ -47,12 +92,6 @@ jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
                                 stringsAsFactors = FALSE)$V4)
 
 
-```
-
-
-```{r}
-test.bed<-read.delim("test.bed", header = FALSE)
-head(test.bed)
 ```
 
 ```{r}
@@ -95,15 +134,14 @@ entrez_tf <- getBM(attributes=c('hgnc_symbol',
 ```
 Para FIMO
 ```{r}
-test.bed.1<-test.bed[test.bed$V4 %in% entrez_tf$hgnc_symbol,]
-test.bed.1<-test.bed.1[unique(test.bed.1$V3),]
-test.bed.1<-test.bed.1[complete.cases(test.bed.1),]
+fimo_transfac_1<-fimo_transfac_1[fimo_transfac_1$id %in% entrez_tf$hgnc_symbol,]
+fimo_transfac_1<-fimo_transfac_1[unique(fimo_transfac_1$start),]
+fimo_transfac_1<-fimo_transfac_1[complete.cases(fimo_transfac_1),]
 ```
 
 ```{r}
 library(ChIPpeakAnno)
-colnames(test.bed.1)<-c("chromosome","start","end","id","nb","strand")
-bed.ranges<-toGRanges(test.bed.1, format= "BED", header= FALSE)
+bed.ranges<-toGRanges(fimo_transfac_1, format= "BED", header= FALSE)
 ```
 
 ```{r}
@@ -120,7 +158,6 @@ aCR<-assignChromosomeRegion(bed.ranges, nucleotideLevel=FALSE,
                            TxDb=TxDb.Hsapiens.UCSC.hg19.knownGene)
 barplot(aCR$percentage, las=3)
 ```
-
 
 ```{r warning=FALSE}
 overlaps.anno <- annotatePeakInBatch(bed.ranges, 
@@ -143,14 +180,13 @@ unique(head(overlaps.anno$gene_name))
 
 Para JASPAR:
 ```{r}
-jaspar.prueba.1<-jaspar.prueba[jaspar.prueba$V4 %in% jaspar_ids,]
-jaspar.prueba.1<-jaspar.prueba.1[unique(jaspar.prueba.1$V3),]
+colnames(jaspar.prueba)<-c("chromosome","start","end","id","nb","strand")
+jaspar.prueba.1<-jaspar.prueba[jaspar.prueba$id %in% jaspar_ids,]
+jaspar.prueba.1<-jaspar.prueba.1[unique(jaspar.prueba.1$start),]
 jaspar.prueba.1<-jaspar.prueba.1[complete.cases(jaspar.prueba.1),]
 ```
 
 ```{r}
-
-colnames(jaspar.prueba.1)<-c("chromosome","start","end","id","nb","strand")
 jaspar.ranges<-toGRanges(jaspar.prueba.1, format= "BED", header= FALSE)
 ```
 
