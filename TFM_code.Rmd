@@ -1,0 +1,658 @@
+---
+title: "TFM_code"
+author: "Gustavo Rosell Romo"
+date: "15 de diciembre de 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Setup
+
+```{r libraries}
+library(biomaRt)
+library("knitr")
+library(rlist)
+library(edgeR)
+library(statmod)
+library(org.Hs.eg.db)
+library(RSQLite)
+library(IRanges)
+#BiocManager::install("ChIPpeakAnno")
+library(ChIPpeakAnno)
+library(EnsDb.Hsapiens.v75)
+```
+
+```{r settings}
+TASK <- "grosell"
+HOME <- '~'
+WD <-  file.path(HOME, TASK) 
+dir.create(WD, 'data')
+
+opts_chunk$set(fig.width = 12,
+               fig.height = 12,
+               cache = TRUE,
+               include = TRUE,
+               cache.lazy = FALSE,
+               warning = TRUE,
+               message = TRUE)
+
+
+
+```
+
+
+# TFBS data retrieval
+
+For transfac + fimo scans
+
+### Fimo download:
+
+```{bash}
+mkdir -p utils 
+
+cd $_
+# retrieving transfac+fimo
+wget -q https://noble.gs.washington.edu/custom-tracks/fimo.hg19.transfac-0.1.bb
+
+# getting the exec for linux 64 bits
+
+rsync -aP rsync://hgdownload.soe.ucsc.edu/genome/admin/exe/linux.x86_64/bigBedToBed .
+
+# making it runnable
+
+chmod a+x bigBedToBed
+
+# converting to bed
+
+./bigBedToBed fimo.hg19.transfac-0.1.bb test.bed
+
+# checking how a bedfile looks like
+
+head test.bed
+
+cut -f4 test.bed | sort | uniq -c | sed 's/^\s*//' > fimo_transfac.txt
+sort test.bed | uniq -c | sed 's/^\s*//' > fimo_transfac_1.txt
+mv fimo_transfac.txt ../data
+mv fimo_transfac_1.txt ../data
+```
+
+### Adding the Fimo list into R
+
+```{r}
+fimo_transfac <- unique(read.table(file.path('data', 'fimo_transfac.txt'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE))
+colnames(fimo_transfac)<- c("Number", "tf")
+```
+
+```{r}
+fimo_transfac_1 <- read.table(file.path('data', 'fimo_transfac_1.txt'), header = FALSE)
+fimo_transfac_1<-fimo_transfac_1[,-1]
+colnames(fimo_transfac_1)<-c("chromosome","start","end","id","nb","strand")
+```
+
+### Adding the JASPAR list into R
+```{r jaspar}
+cmd <- 'wget https://noble.gs.washington.edu/custom-tracks/fimo.hg19.jaspar_core-0.1.bb;
+utils/bigBedToBed fimo.hg19.jaspar_core-0.1.bb jaspar_hg19.bed'
+system(cmd)
+file.rename('jaspar_hg19.bed', file.path('data', 'jaspar_hg19.bed'))
+file.remove('fimo.hg19.jaspar_core-0.1.bb')
+
+jaspar_ids <- unique(read.table(file.path('data', 'jaspar_hg19.bed'),
+                                header = FALSE,
+                                stringsAsFactors = FALSE)$V4)
+jaspar.prueba<-unique(read.table(file.path('data', 'jaspar_hg19.bed')))
+
+```
+Gathering the 2 list in one dataset:
+```{r}
+TF.list<-unique(c(fimo_transfac$tf,jaspar_ids))
+```
+
+### Symbols
+
+We would like to transform TRANSFAC names to HUGO symbols (we'll check differential expression of these using TCGA RSEM data)
+Transformation of Fimo list (TRANSFAC names) to match our TCGA RSEM data:
+```{r}
+con <- org.Hs.eg_dbconn()
+
+stmt <- 'SELECT * FROM alias, gene_info WHERE alias._id == gene_info._id;'
+# execute the query on the database
+aliases <- dbGetQuery(con, stmt)
+
+candidates <- aliases[aliases$alias_symbol %in% toupper(TF.list),]
+candidates2 <- aliases[aliases$symbol %in% toupper(TF.list),]
+
+valid_symbols <- unique(candidates$symbol, candidates2$symbol)
+```
+
+### Entrez IDs
+Gene symbols to Entrez gene ids (TCGA RSEMs also provide these identifiers)
+
+```{r biomart_entrez}
+mart <- useMart("ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+
+
+entrez_tf <- getBM(attributes=c('hgnc_symbol', 
+                                'entrezgene'), 
+                   filters = 'external_gene_name', 
+                   values = valid_symbols,
+                   mart = mart)
+
+```
+
+
+```{r}
+annoData <- toGRanges(EnsDb.Hsapiens.v75, feature= "gene")
+```
+
+### For FIMO:
+
+```{r fimo.1}
+fimo_transfac_1<-fimo_transfac_1[fimo_transfac_1$id %in% entrez_tf$hgnc_symbol,]
+fimo_transfac_1<-fimo_transfac_1[unique(fimo_transfac_1$start),]
+fimo_transfac_1<-fimo_transfac_1[complete.cases(fimo_transfac_1),]
+```
+
+```{r fimo_ranges}
+bed.ranges.fimo<-toGRanges(fimo_transfac_1, format= "BED", header= FALSE)
+```
+
+### For JASPAR:
+
+```{r jaspar.1}
+colnames(jaspar.prueba)<-c("chromosome","start","end","id","nb","strand")
+jaspar.prueba.1<-jaspar.prueba[jaspar.prueba$id %in% jaspar_ids,]
+jaspar.prueba.1<-jaspar.prueba.1[unique(jaspar.prueba.1$start),]
+jaspar.prueba.1<-jaspar.prueba.1[complete.cases(jaspar.prueba.1),]
+```
+
+```{r jaspar_ranges}
+jaspar.ranges<-toGRanges(jaspar.prueba.1, format= "BED", header= FALSE)
+```
+
+# RSEM download and mapping:
+    
+
+### BRCA
+
+```{r brca_download}
+download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/BRCA/20160128/gdac.broadinstitute.org_BRCA.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'brca_rsem.tar.gz'))
+
+brca.fn <- grep('data.txt', untar(file.path(WD, 'brca_rsem.tar.gz'), list = TRUE), value = TRUE)
+untar(file.path(WD, 'brca_rsem.tar.gz'), files = brca.fn)
+
+header.brca <- read.table(file = brca.fn, sep = '\t', header = FALSE, nrow = 1,
+                     stringsAsFactors = FALSE)
+
+brca <- read.table(file = brca.fn, sep = '\t', header = TRUE, skip = 2)
+colnames(brca) <- header.brca[1,]
+
+rownames(brca) <- brca[,1]
+brca <- brca[,-1]
+rm(header.brca)
+```
+
+```{r mapping_BRCA}
+mapping.brca <- data.frame(tcga = rownames(brca),
+                      entrez = sapply(strsplit(rownames(brca), '|', fixed = TRUE),
+                                      function(x) return(x[2])),
+                      symbol = sapply(strsplit(rownames(brca), '|', fixed = TRUE),
+                                      function(x) return(x[1])))
+
+tf.brca <- merge(mapping.brca, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
+```
+
+### COAD
+```{r coad_download}
+download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/COAD/20160128/gdac.broadinstitute.org_COAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'coad_rsem.tar.gz'))
+
+coad.fn <- grep('data.txt', untar(file.path(WD, 'coad_rsem.tar.gz'), list = TRUE), value = TRUE)
+untar(file.path(WD, 'coad_rsem.tar.gz'), files = coad.fn)
+
+header.coad <- read.table(file = coad.fn, sep = '\t', header = FALSE, nrow = 1,
+                     stringsAsFactors = FALSE)
+
+coad <- read.table(file = coad.fn, sep = '\t', header = TRUE, skip = 2)
+colnames(coad) <- header.coad[1,]
+
+rownames(coad) <- coad[,1]
+coad <- coad[,-1]
+rm(header.coad)
+```
+### Mapping:
+
+```{r mapping_coad}
+mapping.coad <- data.frame(tcga = rownames(coad),
+                      entrez = sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                      function(x) return(x[2])),
+                      symbol = sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                      function(x) return(x[1])))
+
+tf.coad <- merge(mapping.coad, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
+```
+
+### LUAD:
+
+```{r luad_download}
+download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/LUAD/20160128/gdac.broadinstitute.org_LUAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'luad_rsem.tar.gz'))
+
+luad.fn <- grep('data.txt', untar(file.path(WD, 'luad_rsem.tar.gz'), list = TRUE), value = TRUE)
+untar(file.path(WD, 'luad_rsem.tar.gz'), files = luad.fn)
+
+header.luad <- read.table(file = luad.fn, sep = '\t', header = FALSE, nrow = 1,
+                     stringsAsFactors = FALSE)
+
+luad <- read.table(file = luad.fn, sep = '\t', header = TRUE, skip = 2)
+colnames(luad) <- header.luad[1,]
+
+rownames(luad) <- luad[,1]
+luad <- luad[,-1]
+rm(header.luad)
+```
+
+```{r mapping_luad}
+mapping.luad <- data.frame(tcga = rownames(luad),
+                      entrez = sapply(strsplit(rownames(luad), '|', fixed = TRUE),
+                                      function(x) return(x[2])),
+                      symbol = sapply(strsplit(rownames(luad), '|', fixed = TRUE),
+                                      function(x) return(x[1])))
+
+tf.luad <- merge(mapping.luad, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
+```
+### PRAD
+
+```{r prad_download}
+download.file('http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/PRAD/20160128/gdac.broadinstitute.org_PRAD.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0.tar.gz',  destfile = file.path(WD, 'prad_rsem.tar.gz'))
+
+prad.fn <- grep('data.txt', untar(file.path(WD, 'prad_rsem.tar.gz'), list = TRUE), value = TRUE)
+untar(file.path(WD, 'prad_rsem.tar.gz'), files = prad.fn)
+
+header.prad <- read.table(file = prad.fn, sep = '\t', header = FALSE, nrow = 1,
+                     stringsAsFactors = FALSE)
+
+prad <- read.table(file = prad.fn, sep = '\t', header = TRUE, skip = 2)
+colnames(prad) <- header.prad[1,]
+
+rownames(prad) <- prad[,1]
+prad <- prad[,-1]
+rm(header.prad)
+```
+
+```{r mapping_prad}
+mapping.prad <- data.frame(tcga = rownames(prad),
+                      entrez = sapply(strsplit(rownames(prad), '|', fixed = TRUE),
+                                      function(x) return(x[2])),
+                      symbol = sapply(strsplit(rownames(prad), '|', fixed = TRUE),
+                                      function(x) return(x[1])))
+
+tf.prad <- merge(mapping.prad, entrez_tf, by.x = 'entrez', by.y = 'entrezgene')
+```
+
+# Diff expression:
+
+## Normal vs tumor, patients with 2 samples:
+
+### BRCA analysis:
+```{r brca_expression}
+brca.r <- round(brca) 
+
+brca.data <- data.frame(barcode = colnames(brca),
+                      sample = strtrim(sapply(strsplit(colnames(brca), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2),
+                      participant = sapply(strsplit(colnames(brca), '-', fixed = TRUE),
+                                              function(x) return(x[3]))
+                      )
+
+## only normals and primary tumors
+brca.data.1 <- brca.data[brca.data$sample %in% c('01', '11'),]
+
+## only matched normal and tumor from the same participant
+selected.brca <- brca.data.1$participant[duplicated(brca.data.1$participant)]
+brca.data.2 <- brca.data.1[brca.data.1$participant %in% selected.brca,]
+brca.barcode <- brca[,brca.data.2$barcode]
+brca_dge <- DGEList(brca.barcode, samples = brca.data.2)
+#Nornm factors:
+brca_dge_norm <- calcNormFactors(brca_dge)
+#Design of the matri, for coad:
+brca.data.2$sample <- as.factor(as.character(brca.data.2$sample))
+brca.data.2$participant <- as.factor(as.character(brca.data.2$participant))
+mmatrix.brca <- model.matrix(~ 0 + sample + participant, data = brca.data.2)
+rownames(mmatrix.brca) <- brca.data.2$barcode
+#Calculate the dispersion:
+brca_dge_disp <- estimateDisp(brca_dge_norm, mmatrix.brca,robust = FALSE)
+#getting the contrast:
+brca_fit <-glmFit(brca_dge_disp, mmatrix.brca)
+contrast.brca<-c(1,-1,rep(0,111))
+brca_fit.1 <- glmLRT(brca_fit, contrast = contrast.brca)
+topTags(brca_fit.1)
+
+#Differential expression:
+summary(decideTests(brca_fit.1))
+
+```
+
+```{r brca_plots}
+plotMD(brca_fit.1)
+abline(h=c(-1, 1), col="green")
+```
+
+### COAD analysis:
+```{r coad_expression}
+coad.r <- round(coad) 
+
+coad.data <- data.frame(barcode = colnames(coad),
+                      sample = strtrim(sapply(strsplit(colnames(coad), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2),
+                      participant = sapply(strsplit(colnames(coad), '-', fixed = TRUE),
+                                              function(x) return(x[3]))
+                      )
+
+## only normals and primary tumors
+coad.data.1 <- coad.data[coad.data$sample %in% c('01', '11'),]
+
+## only matched normal and tumor from the same participant
+selected.coad <- coad.data.1$participant[duplicated(coad.data.1$participant)]
+coad.data.2 <- coad.data.1[coad.data.1$participant %in% selected.coad,]
+coad.barcode <- coad[,coad.data.2$barcode]
+coad_dge <- DGEList(coad.barcode, samples = coad.data.2)
+#Nornm factors:
+coad_dge_norm <- calcNormFactors(coad_dge)
+#Design of the matri, for coad:
+coad.data.2$sample <- as.factor(as.character(coad.data.2$sample))
+coad.data.2$participant <- as.factor(as.character(coad.data.2$participant))
+mmatrix.coad <- model.matrix(~ 0 + sample + participant, data = coad.data.2)
+rownames(mmatrix.coad) <- coad.data.2$barcode
+#Calculate the dispersion:
+coad_dge_disp <- estimateDisp(coad_dge_norm, mmatrix.coad,robust = FALSE)
+#getting the contrast:
+coad_fit <-glmFit( coad_dge_disp, mmatrix.coad)
+contrast.coad<-c(1,-1,rep(0,25))
+coad_fit.1 <- glmLRT(coad_fit, contrast = contrast.coad)
+topTags(coad_fit.1)
+#Differential expression:
+summary(decideTests(coad_fit.1))
+```
+
+```{r coad_plots}
+plotMD(coad_fit.1)
+abline(h=c(-1, 1), col="green")
+```
+
+### LUAD analysis:
+```{r luad_expression}
+luad.r <- round(luad) 
+
+luad.data <- data.frame(barcode = colnames(luad),
+                      sample = strtrim(sapply(strsplit(colnames(luad), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2),
+                      participant = sapply(strsplit(colnames(luad), '-', fixed = TRUE),
+                                              function(x) return(x[3]))
+                      )
+
+## only normals and primary tumors
+luad.data.1 <- luad.data[luad.data$sample %in% c('01', '11'),]
+
+## only matched normal and tumor from the same participant
+selected.luad <- luad.data.1$participant[duplicated(luad.data.1$participant)]
+luad.data.2 <- luad.data.1[luad.data.1$participant %in% selected.luad,]
+luad.barcode <- luad[,luad.data.2$barcode]
+luad_dge <- DGEList(luad.barcode, samples = luad.data.2)
+#Nornm factors:
+luad_dge_norm <- calcNormFactors(luad_dge)
+#Design of the matri, for coad:
+luad.data.2$sample <- as.factor(as.character(luad.data.2$sample))
+luad.data.2$participant <- as.factor(as.character(luad.data.2$participant))
+mmatrix.luad <- model.matrix(~ 0 + sample + participant, data = luad.data.2)
+rownames(mmatrix.luad) <- luad.data.2$barcode
+#Calculate the dispersion:
+luad_dge_disp <- estimateDisp(luad_dge_norm, mmatrix.luad,robust = FALSE)
+#getting the contrast:
+luad_fit <-glmFit(luad_dge_disp, mmatrix.luad)
+contrast.luad<-c(1,-1,rep(0,57))
+luad_fit.1 <- glmLRT(luad_fit, contrast = contrast.luad)
+topTags(luad_fit.1)
+#Differential expression:
+summary(decideTests(luad_fit.1))
+```
+
+```{r luad_plots}
+plotMD(luad_fit.1)
+abline(h=c(-1, 1), col="green")
+```
+### PRAD analysis:
+```{r prad_expression}
+prad.r <- round(prad) 
+
+prad.data <- data.frame(barcode = colnames(prad),
+                      sample = strtrim(sapply(strsplit(colnames(prad), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2),
+                      participant = sapply(strsplit(colnames(prad), '-', fixed = TRUE),
+                                              function(x) return(x[3]))
+                      )
+
+## only normals and primary tumors
+prad.data.1 <- prad.data[prad.data$sample %in% c('01', '11'),]
+
+## only matched normal and tumor from the same participant
+selected.prad <- prad.data.1$participant[duplicated(prad.data.1$participant)]
+prad.data.2 <- prad.data.1[prad.data.1$participant %in% selected.prad,]
+prad.barcode <- prad[,prad.data.2$barcode]
+prad_dge <- DGEList(prad.barcode, samples = prad.data.2)
+#Nornm factors:
+prad_dge_norm <- calcNormFactors(prad_dge)
+#Design of the matri, for coad:
+prad.data.2$sample <- as.factor(as.character(prad.data.2$sample))
+prad.data.2$participant <- as.factor(as.character(prad.data.2$participant))
+mmatrix.prad <- model.matrix(~ 0 + sample + participant, data = prad.data.2)
+rownames(mmatrix.prad) <- prad.data.2$barcode
+#Calculate the dispersion:
+prad_dge_disp <- estimateDisp(prad_dge_norm, mmatrix.prad,robust = FALSE)
+#getting the contrast:
+prad_fit <-glmFit(prad_dge_disp, mmatrix.prad)
+contrast.prad<-c(1,-1,rep(0,51))
+prad_fit.1 <- glmLRT(prad_fit, contrast = contrast.prad)
+topTags(prad_fit.1)
+#Differential expression:
+summary(decideTests(prad_fit.1))
+```
+
+```{r prad_plots}
+plotMD(prad_fit.1)
+abline(h=c(-1, 1), col="green")
+```
+
+## General TFs differential expression:
+
+### BRCA TF analysis:
+```{r}
+#this way we split the rownames between the hgnc symbol and their number:
+brca.TF.list<-brca[sapply(strsplit(rownames(brca), '|', fixed = TRUE),
+                                              function(x) return(x[2])) %in% entrez_tf$entrezgene,]
+#Transforming into DGElist:
+brca_dge_norm_general<-DGEList(brca.TF.list)
+#Norm factors:
+brca_dge_norm_general<-calcNormFactors(brca_dge_norm_general)
+#Calculating the dispersion:
+brca_general<-estimateCommonDisp(brca_dge_norm_general)
+#Design the matrix:
+Normal.g.brca<-factor(c("11"== strtrim(sapply(strsplit(colnames(brca_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+Tumor.g.brca<-factor(c("01"== strtrim(sapply(strsplit(colnames(brca_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+matrix.model.g.brca<-model.matrix(~Tumor.g.brca+Normal.g.brca)
+rownames(matrix.model.g.brca)<-colnames(brca_dge_norm_general$counts)
+#Differential expression:
+brca.fit.g<-glmFit(brca_general, matrix.model.g.brca)
+brca.lrt.g<-glmLRT(brca.fit.g)
+topTags(brca.lrt.g)
+o.brca.g <- order(brca.lrt.g$table$PValue)
+brca.cpm.g<-cpm(brca_general)[o.brca.g[1:10],]
+head(colnames(brca.cpm.g))
+#Seeing the summary of their expressions:
+summary(decideTests(brca.lrt.g))
+```
+
+```{r}
+plotMD(brca.lrt.g)
+abline(h=c(-1, 1), col="green")
+```
+
+### COAD TF analysis:
+```{r}
+#this way we split the rownames between the hgnc symbol and their number:
+coad.TF.list<-coad[sapply(strsplit(rownames(coad), '|', fixed = TRUE),
+                                              function(x) return(x[2])) %in% entrez_tf$entrezgene,]
+#Transforming into DGElist:
+coad_dge_norm_general<-DGEList(coad.TF.list)
+#Norm factors:
+coad_dge_norm_general<-calcNormFactors(coad_dge_norm_general)
+#Calculating the dispersion:
+coad_general<-estimateCommonDisp(coad_dge_norm_general)
+#Design the matrix:
+Normal.g.coad<-factor(c("11"== strtrim(sapply(strsplit(colnames(coad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+Tumor.g.coad<-factor(c("01"== strtrim(sapply(strsplit(colnames(coad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+matrix.model.g.coad<-model.matrix(~Tumor.g.coad+Normal.g.coad)
+rownames(matrix.model.g.coad)<-colnames(coad_dge_norm_general$counts)
+#Differential expression:
+coad.fit.g<-glmFit(coad_general, matrix.model.g.coad)
+coad.lrt.g<-glmLRT(coad.fit.g)
+topTags(coad.lrt.g)
+o.coad.g <- order(coad.lrt.g$table$PValue)
+coad.cpm.g<-cpm(coad_general)[o.coad.g[1:10],]
+head(colnames(coad.cpm.g))
+#Seeing the summary of their expressions:
+summary(decideTests(coad.lrt.g))
+```
+
+```{r}
+plotMD(coad.lrt.g)
+abline(h=c(-1, 1), col="green")
+```
+
+### LUAD TF analysis:
+```{r}
+#this way we split the rownames between the hgnc symbol and their number:
+luad.TF.list<-luad[sapply(strsplit(rownames(luad), '|', fixed = TRUE),
+                                              function(x) return(x[2])) %in% entrez_tf$entrezgene,]
+#Transforming into DGElist:
+luad_dge_norm_general<-DGEList(luad.TF.list)
+#Norm factors:
+luad_dge_norm_general<-calcNormFactors(luad_dge_norm_general)
+#Calculating the dispersion:
+luad_general<-estimateCommonDisp(luad_dge_norm_general)
+#Design the matrix:
+Normal.g.luad<-factor(c("11"== strtrim(sapply(strsplit(colnames(luad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+Tumor.g.luad<-factor(c("01"== strtrim(sapply(strsplit(colnames(luad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+matrix.model.g.luad<-model.matrix(~Tumor.g.luad+Normal.g.luad)
+rownames(matrix.model.g.luad)<-colnames(luad_dge_norm_general$counts)
+#Differential expression:
+luad.fit.g<-glmFit(luad_general, matrix.model.g.luad)
+
+luad.lrt.g<-glmLRT(luad.fit.g)
+topTags(luad.lrt.g)
+o.luad.g <- order(luad.lrt.g$table$PValue)
+luad.cpm.g<-cpm(luad_general)[o.luad.g[1:10],]
+head(colnames(luad.cpm.g))
+#Seeing the summary of their expressions:
+summary(decideTests(luad.lrt.g))
+```
+
+```{r}
+plotMD(luad.lrt.g)
+abline(h=c(-1, 1), col="green")
+```
+
+### PRAD TF analysis:
+```{r}
+#this way we split the rownames between the hgnc symbol and their number:
+prad.TF.list<-prad[sapply(strsplit(rownames(prad), '|', fixed = TRUE),
+                                              function(x) return(x[2])) %in% entrez_tf$entrezgene,]
+#Transforming into DGElist:
+prad_dge_norm_general<-DGEList(prad.TF.list)
+#Norm factors:
+prad_dge_norm_general<-calcNormFactors(prad_dge_norm_general)
+#Calculating the dispersion:
+prad_general<-estimateCommonDisp(prad_dge_norm_general)
+#Design the matrix:
+Normal.g.prad<-factor(c("11"== strtrim(sapply(strsplit(colnames(prad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+Tumor.g.prad<-factor(c("01"== strtrim(sapply(strsplit(colnames(prad_general), '-', fixed = TRUE),
+                                              function(x) return(x[4])), 2)))
+matrix.model.g.prad<-model.matrix(~Tumor.g.prad+Normal.g.prad)
+rownames(matrix.model.g.prad)<-colnames(prad_dge_norm_general$counts)
+#Differential expression:
+prad.fit.g<-glmFit(prad_general, matrix.model.g.prad)
+
+prad.lrt.g<-glmLRT(prad.fit.g)
+topTags(prad.lrt.g)
+o.prad.g <- order(prad.lrt.g$table$PValue)
+prad.cpm.g<-cpm(prad_general)[o.prad.g[1:10],]
+head(colnames(prad.cpm.g))
+#Seeing the summary of their expressions:
+summary(decideTests(prad.lrt.g))
+```
+
+```{r}
+plotMD(prad.lrt.g)
+abline(h=c(-1, 1), col="green")
+```
+
+
+# Finding the nearest genes, for the paired patient comparison:
+```{r}
+genes_names_fimo<-data.frame(overlaps.anno.fimo$gene_name,overlaps.anno.fimo$id)
+genes_names_jaspar<-data.frame(overlaps.anno.jaspar$gene_name,overlaps.anno.jaspar$id)
+```
+
+### BRCA:
+```{r}
+genes.brca.fimo<-brca_fit.1[sapply(strsplit(rownames(brca_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_fimo$overlaps.anno.fimo.gene_name,]
+genes.brca.jaspar<-brca_fit.1[sapply(strsplit(rownames(brca_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_jaspar$overlaps.anno.jaspar.gene_name,]
+
+total.genes.brca<-rbind(genes.brca.fimo$table,genes.brca.jaspar$table)
+```
+
+### COAD:
+```{r}
+genes.coad.fimo<-coad_fit.1[sapply(strsplit(rownames(coad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_fimo$overlaps.anno.fimo.gene_name,]
+genes.coad.jaspar<-coad_fit.1[sapply(strsplit(rownames(coad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_jaspar$overlaps.anno.jaspar.gene_name,]
+
+total.genes.coad<-rbind(genes.coad.fimo$table,genes.coad.jaspar$table)
+```
+
+### LUAD:
+```{r}
+genes.luad.fimo<-luad_fit.1[sapply(strsplit(rownames(luad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_fimo$overlaps.anno.fimo.gene_name,]
+genes.luad.jaspar<-luad_fit.1[sapply(strsplit(rownames(luad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_jaspar$overlaps.anno.jaspar.gene_name,]
+
+total.genes.luad<-rbind(genes.luad.fimo$table,genes.luad.jaspar$table)
+```
+
+### PRAD:
+```{r}
+genes.prad.fimo<-prad_fit.1[sapply(strsplit(rownames(prad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_fimo$overlaps.anno.fimo.gene_name,]
+genes.prad.jaspar<-prad_fit.1[sapply(strsplit(rownames(prad_fit.1), '|', fixed = TRUE),
+                                              function(x) return(x[1])) %in% genes_names_jaspar$overlaps.anno.jaspar.gene_name,]
+
+total.genes.prad<-rbind(genes.prad.fimo$table,genes.prad.jaspar$table)
+
+```
+
